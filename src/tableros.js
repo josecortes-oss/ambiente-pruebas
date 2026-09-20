@@ -71,6 +71,13 @@ async function validateDefinition(def) {
     ...extractDomainFields(def.dominio),
   ]);
 
+  if (def.grafico) {
+    if (!def.grafico.agrupar_por) errors.push('El bloque "grafico" necesita "agrupar_por".');
+    if (!def.grafico.medir) errors.push('El bloque "grafico" necesita "medir".');
+    if (def.grafico.agrupar_por) camposReferenciados.add(def.grafico.agrupar_por);
+    if (def.grafico.medir) camposReferenciados.add(def.grafico.medir);
+  }
+
   for (const campo of camposReferenciados) {
     if (!camposModelo.has(campo)) {
       errors.push(`El campo "${campo}" no existe en el modelo "${def.modelo}".`);

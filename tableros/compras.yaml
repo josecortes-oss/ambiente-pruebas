@@ -15,3 +15,7 @@ campos:
 dominio: []
 orden: "date_order desc"
 limite: 80
+grafico:
+  titulo: "Total comprado por proveedor"
+  agrupar_por: partner_id
+  medir: amount_total

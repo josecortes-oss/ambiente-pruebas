@@ -37,11 +37,30 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
     }
 
     const campos = def.campos.map((c) => (typeof c === 'string' ? c : c.campo));
+    const camposConsulta = new Set(campos);
+    if (def.grafico) {
+      camposConsulta.add(def.grafico.agrupar_por);
+      camposConsulta.add(def.grafico.medir);
+    }
     const filas = await executeKw(def.modelo, 'search_read', [def.dominio || []], {
-      fields: campos,
+      fields: [...camposConsulta],
       limit: def.limite || 80,
       order: def.orden || '',
     });
+
+    let grafico = null;
+    if (def.grafico) {
+      const totales = new Map();
+      for (const fila of filas) {
+        const bruto = fila[def.grafico.agrupar_por];
+        const etiqueta = Array.isArray(bruto) ? bruto[1] : bruto === false ? 'Sin dato' : String(bruto);
+        const valor = Number(fila[def.grafico.medir]) || 0;
+        totales.set(etiqueta, (totales.get(etiqueta) || 0) + valor);
+      }
+      const entradas = [...totales.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const max = Math.max(...entradas.map(([, valor]) => valor), 1);
+      grafico = { titulo: def.grafico.titulo || `${def.grafico.medir} por ${def.grafico.agrupar_por}`, entradas, max };
+    }
 
     const columnas = def.campos.map((c) =>
       typeof c === 'string' ? { campo: c, etiqueta: c } : { campo: c.campo, etiqueta: c.etiqueta || c.campo }
@@ -62,7 +81,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       return formateada;
     });
 
-    res.render('tablero-detalle', { def, columnas, filas: filasFormateadas });
+    res.render('tablero-detalle', { def, columnas, filas: filasFormateadas, grafico });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al ejecutar el tablero: ${err.message || err}` });
   }

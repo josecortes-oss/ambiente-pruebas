@@ -6,6 +6,22 @@
 <main>
   <h2><%= def.titulo || def._id %></h2>
   <p><small>Modelo: <%= def.modelo %> · <%= filas.length %> registros</small></p>
+
+  <% if (grafico) { %>
+    <div class="grafico">
+      <p class="grafico-titulo"><%= grafico.titulo %></p>
+      <% grafico.entradas.forEach(([etiqueta, valor]) => { %>
+        <div class="barra-fila">
+          <span class="barra-etiqueta" title="<%= etiqueta %>"><%= etiqueta %></span>
+          <span class="barra-pista">
+            <span class="barra-relleno" style="width: <%= Math.round((valor / grafico.max) * 100) %>%"></span>
+          </span>
+          <span class="barra-num"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+
   <table>
     <thead>
       <tr><% columnas.forEach((c) => { %><th><%= c.etiqueta %></th><% }) %></tr>

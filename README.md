@@ -39,7 +39,17 @@ a la base de datos.
    dominio: []
    orden: "date_order desc"
    limite: 80
+   grafico:
+     titulo: "Total vendido por cliente"
+     agrupar_por: partner_id
+     medir: amount_total
    ```
+
+   El bloque `grafico` (opcional) hace que el tablero muestre, apenas se
+   abre, un gráfico de barras con la suma de `medir` agrupada por
+   `agrupar_por` (top 8), antes de la tabla de detalle. `agrupar_por` y
+   `medir` pasan por la misma evaluación semántica que el resto de los
+   campos.
 
 4. **Evaluación semántica**: antes de mostrar cualquier tablero, la app llama
    a `fields_get` sobre el `modelo` indicado (por la conexión de servicio) y

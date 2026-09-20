@@ -18,3 +18,7 @@ campos:
 dominio: []
 orden: "date_order desc"
 limite: 80
+grafico:
+  titulo: "Total vendido por cliente"
+  agrupar_por: partner_id
+  medir: amount_total
