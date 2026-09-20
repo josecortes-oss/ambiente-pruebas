@@ -4,6 +4,7 @@
 titulo: "Órdenes de Venta"
 modulo: ventas
 modelo: sale.order
+posicion: 1
 campos:
   - campo: name
     etiqueta: "Orden"

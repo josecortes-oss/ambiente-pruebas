@@ -1,0 +1,8 @@
+# Tablero de tipo especial: su lógica vive en src/ventas-mensual.js y
+# src/routes/tableros.js (filtros + varios gráficos + dos modelos), no en el
+# motor genérico de "campos"/"grafico". Aun así pasa por evaluación semántica:
+# ver CAMPOS_POR_TIPO en src/tableros.js.
+titulo: "Ventas del Mes"
+modulo: ventas
+tipo: ventas_mensual
+posicion: 3

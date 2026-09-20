@@ -63,11 +63,38 @@ a la base de datos.
    en `/tableros`, la lista de tableros inválidos junto con el motivo exacto
    del error, para poder corregir el archivo YAML.
 
+5. **Orden de la lista**: cada tablero puede declarar `posicion` (número) para
+   fijar su lugar en `/tableros`; a igual `posicion` se ordenan por nombre de
+   archivo. Sin `posicion`, un tablero queda al final. Orden actual: Órdenes
+   de Venta (1), Órdenes de Compra (2), Ventas del Mes (3).
+
+6. **Ventas del Mes** (`tableros/ventas-mes.yaml`, `tipo: ventas_mensual`): es
+   el único tablero con lógica propia (en `src/ventas-mensual.js`), porque
+   combina dos modelos (`sale.order` y `sale.order.line`) y filtros
+   interactivos que el motor genérico de `campos`/`grafico` no soporta:
+   - **Filtros** (por querystring, recargan la página): período (este mes,
+     mes anterior, este año, año anterior, todo el histórico), empresa
+     (`res.company`) y vendedor (`user_id`). El selector de vendedor siempre
+     lista a todos los vendedores con ventas registradas, sin importar el
+     filtro activo, para poder cambiar de uno a otro sin perder opciones.
+   - **Gráficos**: top 10 productos (`sale.order.line` agrupado por
+     `product_id`, sumando `price_subtotal` vía `read_group`), top clientes y
+     ventas por vendedor (`sale.order` agrupado por `partner_id`/`user_id`,
+     sumando `amount_total`).
+   - Sigue pasando por evaluación semántica: `CAMPOS_POR_TIPO` en
+     `src/tableros.js` declara qué campos de cada modelo usa este tipo, y se
+     verifican con `fields_get` igual que un tablero genérico.
+
 ### Agregar un nuevo tablero
 
 Basta con crear un archivo `.yaml` en `tableros/` con `modelo`, `campos` y,
-opcionalmente, `titulo`, `modulo`, `dominio`, `orden` y `limite`. No requiere
-reiniciar código de negocio: se valida y se lista automáticamente.
+opcionalmente, `titulo`, `modulo`, `dominio`, `orden`, `limite`, `grafico` y
+`posicion`. No requiere reiniciar código de negocio: se valida y se lista
+automáticamente. Un tablero con necesidades especiales (varios modelos,
+filtros interactivos) sigue el patrón de `ventas_mensual`: un `tipo` propio,
+lógica dedicada en `src/routes/tableros.js`, y su entrada correspondiente en
+`CAMPOS_POR_TIPO` (`src/tableros.js`) para que la evaluación semántica lo
+cubra igual.
 
 ### Ejecutar
 

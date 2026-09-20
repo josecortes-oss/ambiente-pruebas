@@ -1,6 +1,7 @@
 titulo: "Órdenes de Compra"
 modulo: compras
 modelo: purchase.order
+posicion: 2
 campos:
   - campo: name
     etiqueta: "Orden"

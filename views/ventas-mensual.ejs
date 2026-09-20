@@ -1,0 +1,103 @@
+<%- include('layout-head', { titulo: def.titulo || def._id }) %>
+<header>
+  <span><a href="/tableros">&larr; Tableros</a></span>
+  <span><a href="/logout">Salir</a></span>
+</header>
+<main>
+  <h2><%= def.titulo || def._id %></h2>
+  <p><small><%= filas.length %> órdenes en el período seleccionado</small></p>
+
+  <form method="GET" action="/tableros/ventas-mes" class="barra-filtros">
+    <div class="campo-filtro">
+      <label for="periodo">Período</label>
+      <select id="periodo" name="periodo">
+        <% periodos.forEach((p) => { %>
+          <option value="<%= p.clave %>" <%= filtros.periodo === p.clave ? 'selected' : '' %>><%= p.etiqueta %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="campo-filtro">
+      <label for="empresa">Empresa</label>
+      <select id="empresa" name="empresa">
+        <option value="">Todas</option>
+        <% empresas.forEach((e) => { %>
+          <option value="<%= e.id %>" <%= filtros.empresaId === e.id ? 'selected' : '' %>><%= e.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="campo-filtro">
+      <label for="vendedor">Vendedor</label>
+      <select id="vendedor" name="vendedor">
+        <option value="">Todos</option>
+        <% vendedores.forEach((v) => { %>
+          <option value="<%= v.id %>" <%= filtros.vendedorId === v.id ? 'selected' : '' %>><%= v.nombre %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit">Aplicar</button>
+  </form>
+
+  <div class="graficos-grid">
+    <div class="grafico">
+      <p class="grafico-titulo"><%= graficoProductos.titulo %></p>
+      <% if (graficoProductos.entradas.length === 0) { %>
+        <p><small>Sin datos para este filtro.</small></p>
+      <% } %>
+      <% graficoProductos.entradas.forEach(([etiqueta, valor]) => { %>
+        <div class="barra-fila">
+          <span class="barra-etiqueta" title="<%= etiqueta %>"><%= etiqueta %></span>
+          <span class="barra-pista"><span class="barra-relleno" style="width: <%= Math.round((valor / graficoProductos.max) * 100) %>%"></span></span>
+          <span class="barra-num"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="grafico">
+      <p class="grafico-titulo"><%= graficoClientes.titulo %></p>
+      <% if (graficoClientes.entradas.length === 0) { %>
+        <p><small>Sin datos para este filtro.</small></p>
+      <% } %>
+      <% graficoClientes.entradas.forEach(([etiqueta, valor]) => { %>
+        <div class="barra-fila">
+          <span class="barra-etiqueta" title="<%= etiqueta %>"><%= etiqueta %></span>
+          <span class="barra-pista"><span class="barra-relleno" style="width: <%= Math.round((valor / graficoClientes.max) * 100) %>%"></span></span>
+          <span class="barra-num"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="grafico">
+      <p class="grafico-titulo"><%= graficoVendedores.titulo %></p>
+      <% if (graficoVendedores.entradas.length === 0) { %>
+        <p><small>Sin datos para este filtro.</small></p>
+      <% } %>
+      <% graficoVendedores.entradas.forEach(([etiqueta, valor]) => { %>
+        <div class="barra-fila">
+          <span class="barra-etiqueta" title="<%= etiqueta %>"><%= etiqueta %></span>
+          <span class="barra-pista"><span class="barra-relleno" style="width: <%= Math.round((valor / graficoVendedores.max) * 100) %>%"></span></span>
+          <span class="barra-num"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Orden</th><th>Cliente</th><th>Vendedor</th><th>Fecha</th><th>Total</th><th>Estado</th></tr>
+    </thead>
+    <tbody>
+      <% filas.forEach((f) => { %>
+        <tr>
+          <td><%= f.name %></td>
+          <td><%= f.partner_id %></td>
+          <td><%= f.user_id %></td>
+          <td><%= f.date_order %></td>
+          <td><%= f.amount_total %></td>
+          <td><%= f.state %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

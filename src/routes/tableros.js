@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth } = require('./auth');
 const { loadValidatedDefinitions, getValidatedDefinition } = require('../tableros');
 const { executeKw } = require('../odoo-client');
+const { PERIODOS, obtenerDatosVentasMensuales } = require('../ventas-mensual');
 
 const router = express.Router();
 
@@ -33,6 +34,34 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
     if (!def.valido) {
       return res.status(422).render('error', {
         mensaje: `Este tablero no pasó la evaluación semántica y no puede mostrarse:\n${def.errores.join('\n')}`,
+      });
+    }
+
+    if (def.tipo === 'ventas_mensual') {
+      const periodo = req.query.periodo || 'este_mes';
+      const empresaId = req.query.empresa ? Number(req.query.empresa) : null;
+      const vendedorId = req.query.vendedor ? Number(req.query.vendedor) : null;
+      const datos = await obtenerDatosVentasMensuales({ periodo, empresaId, vendedorId });
+
+      const filasFormateadas = datos.filas.map((fila) => ({
+        name: fila.name,
+        partner_id: fila.partner_id ? fila.partner_id[1] : '',
+        user_id: fila.user_id ? fila.user_id[1] : '',
+        date_order: fila.date_order,
+        amount_total: fila.amount_total,
+        state: fila.state,
+      }));
+
+      return res.render('ventas-mensual', {
+        def,
+        periodos: PERIODOS,
+        filtros: { periodo, empresaId, vendedorId },
+        empresas: datos.empresas,
+        vendedores: datos.vendedores,
+        graficoClientes: datos.graficoClientes,
+        graficoVendedores: datos.graficoVendedores,
+        graficoProductos: datos.graficoProductos,
+        filas: filasFormateadas,
       });
     }
 

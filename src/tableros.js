@@ -20,7 +20,11 @@ function loadDefinition(file) {
 }
 
 function loadAllDefinitions() {
-  return listDefinitionFiles().map(loadDefinition);
+  // "posicion" ordena la lista de tableros; no confundir con "orden", que en
+  // cada tablero es la cláusula order-by de Odoo (p. ej. "date_order desc").
+  return listDefinitionFiles()
+    .map(loadDefinition)
+    .sort((a, b) => (a.posicion ?? 999) - (b.posicion ?? 999) || a._id.localeCompare(b._id));
 }
 
 const LOGICAL_OPERATORS = new Set(['&', '|', '!']);
@@ -44,8 +48,47 @@ function extractDomainFields(domain) {
  * los campos referenciados (columnas + dominio) existen y son accesibles.
  * Un tablero que falla esta evaluación nunca llega a mostrarse.
  */
+async function validarCamposModelo(modelo, campos, errors) {
+  let fieldsGet;
+  try {
+    fieldsGet = await executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+  } catch (err) {
+    errors.push(`El modelo "${modelo}" no existe o no es accesible: ${err.message || err}`);
+    return;
+  }
+  const camposModelo = new Set(Object.keys(fieldsGet));
+  for (const campo of campos) {
+    if (!camposModelo.has(campo)) {
+      errors.push(`El campo "${campo}" no existe en el modelo "${modelo}".`);
+    }
+  }
+}
+
+// Tableros de tipo especial (lógica propia en las rutas, no genérica por YAML):
+// cada uno declara los campos que su código realmente usa, para que la
+// evaluación semántica los siga cubriendo.
+const CAMPOS_POR_TIPO = {
+  ventas_mensual: {
+    'sale.order': ['name', 'partner_id', 'user_id', 'company_id', 'date_order', 'amount_total', 'state'],
+    'sale.order.line': ['order_id', 'product_id', 'price_subtotal'],
+  },
+};
+
+/**
+ * Evaluación semántica: antes de exponer un tablero, confirma contra Odoo
+ * (por la conexión de servicio, ver odoo-client.js) que el modelo y todos
+ * los campos referenciados (columnas + dominio) existen y son accesibles.
+ * Un tablero que falla esta evaluación nunca llega a mostrarse.
+ */
 async function validateDefinition(def) {
   const errors = [];
+
+  if (def.tipo && CAMPOS_POR_TIPO[def.tipo]) {
+    for (const [modelo, campos] of Object.entries(CAMPOS_POR_TIPO[def.tipo])) {
+      await validarCamposModelo(modelo, campos, errors);
+    }
+    return { valido: errors.length === 0, errores: errors };
+  }
 
   if (!def.modelo) errors.push('Falta la clave "modelo".');
   if (!Array.isArray(def.campos) || def.campos.length === 0) {

@@ -1,6 +1,6 @@
 <%- include('layout-head', { titulo: 'Iniciar sesión' }) %>
 <main>
-  <form method="POST" action="/login">
+  <form method="POST" action="/login" class="form-login">
     <h2>Tableros Odoo</h2>
     <small>Base de datos: <strong><%= db %></strong></small>
     <% if (error) { %><p class="error"><%= error %></p><% } %>
