@@ -10,15 +10,19 @@ a la base de datos.
 
 ### Cómo funciona
 
-1. **Conexión**: se realiza vía XML-RPC de Odoo (`/xmlrpc/2/common` y
-   `/xmlrpc/2/object`), nunca por SQL directo. El host y la base de datos
-   (`ODOO_URL`, `ODOO_DB`) se configuran una sola vez en `ambiente-pruebas.env`.
+1. **Conexión a la base de datos**: se realiza vía XML-RPC de Odoo
+   (`/xmlrpc/2/common` y `/xmlrpc/2/object`), nunca por SQL directo. El host,
+   la base de datos y la **API key de servicio** (`ODOO_URL`, `ODOO_DB`,
+   `ODOO_LOGIN`, `ODOO_API_KEY`) se configuran una sola vez en
+   `ambiente-pruebas.env`. Esa API key es el único método de conexión que la
+   app usa para consultar Odoo (`fields_get`, `search_read`, etc.); ninguna
+   consulta de datos usa la contraseña de un usuario.
 2. **Usuarios**: son los definidos en Odoo. Cada usuario inicia sesión con su
-   propio login y **API key personal** de Odoo (Ajustes → Cuentas de
-   desarrollador → Claves API). La app nunca usa una API key fija de servicio
-   para consultar datos: cada consulta se ejecuta con las credenciales del
-   usuario logueado, por lo que respeta los permisos y restricciones de
-   registro que ese usuario ya tiene en Odoo.
+   **login y contraseña de Odoo** (los mismos que usa para entrar a Odoo). Esa
+   autenticación solo confirma su identidad (y, para los administradores, si
+   pertenecen al grupo `base.group_system`); las consultas de los tableros
+   siempre corren por la conexión de servicio del punto anterior, no con el
+   usuario que inició sesión.
 3. **Tableros como archivos de texto**: cada tablero es un archivo YAML en
    [tableros/](tableros/), editable directamente por el administrador del
    sistema sin tocar código. Ejemplo (`tableros/ventas.yaml`):
@@ -38,9 +42,9 @@ a la base de datos.
    ```
 
 4. **Evaluación semántica**: antes de mostrar cualquier tablero, la app llama
-   a `fields_get` sobre el `modelo` indicado (con las credenciales del
-   usuario) y verifica que:
-   - el modelo exista y sea accesible para ese usuario,
+   a `fields_get` sobre el `modelo` indicado (por la conexión de servicio) y
+   verifica que:
+   - el modelo exista y sea accesible,
    - cada `campo` listado exista en el modelo,
    - cada campo usado en `dominio` (filtros) exista en el modelo.
 
@@ -63,6 +67,7 @@ npm start   # http://localhost:3000
 ```
 
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
-`ODOO_URL`, `ODOO_DB`, `SESSION_SECRET`. (`ODOO_LOGIN`/`ODOO_API_KEY` quedan
-como referencia de un usuario de prueba; el login real de cada persona se
-hace desde el formulario web.)
+`ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a
+la base de datos) y `SESSION_SECRET`. El login de cada persona en el
+formulario web usa su propio usuario y contraseña de Odoo, no estas
+variables.

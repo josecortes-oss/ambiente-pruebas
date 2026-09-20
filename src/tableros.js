@@ -40,11 +40,11 @@ function extractDomainFields(domain) {
 
 /**
  * Evaluación semántica: antes de exponer un tablero, confirma contra Odoo
- * (con las credenciales del usuario que solicita el tablero) que el modelo
- * y todos los campos referenciados (columnas + dominio) existen y son
- * accesibles. Un tablero que falla esta evaluación nunca llega a mostrarse.
+ * (por la conexión de servicio, ver odoo-client.js) que el modelo y todos
+ * los campos referenciados (columnas + dominio) existen y son accesibles.
+ * Un tablero que falla esta evaluación nunca llega a mostrarse.
  */
-async function validateDefinition(def, credentials) {
+async function validateDefinition(def) {
   const errors = [];
 
   if (!def.modelo) errors.push('Falta la clave "modelo".');
@@ -57,11 +57,11 @@ async function validateDefinition(def, credentials) {
 
   let fieldsGet;
   try {
-    fieldsGet = await executeKw(credentials, def.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+    fieldsGet = await executeKw(def.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
   } catch (err) {
     return {
       valido: false,
-      errores: [`El modelo "${def.modelo}" no existe o el usuario no tiene acceso: ${err.message || err}`],
+      errores: [`El modelo "${def.modelo}" no existe o no es accesible: ${err.message || err}`],
     };
   }
 
@@ -80,22 +80,22 @@ async function validateDefinition(def, credentials) {
   return { valido: errors.length === 0, errores: errors };
 }
 
-async function loadValidatedDefinitions(credentials) {
+async function loadValidatedDefinitions() {
   const definiciones = loadAllDefinitions();
   const resultados = [];
   for (const def of definiciones) {
-    const validacion = await validateDefinition(def, credentials);
+    const validacion = await validateDefinition(def);
     resultados.push({ ...def, ...validacion });
   }
   return resultados;
 }
 
-async function getValidatedDefinition(id, credentials) {
+async function getValidatedDefinition(id) {
   const files = listDefinitionFiles();
   const file = files.find((f) => path.basename(f, path.extname(f)) === id);
   if (!file) return null;
   const def = loadDefinition(file);
-  const validacion = await validateDefinition(def, credentials);
+  const validacion = await validateDefinition(def);
   return { ...def, ...validacion };
 }
 

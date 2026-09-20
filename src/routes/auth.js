@@ -8,16 +8,19 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/login', async (req, res) => {
-  const { login, apiKey } = req.body;
-  if (!login || !apiKey) {
-    return res.render('login', { db: ODOO_DB, error: 'Ingresa usuario y API key.' });
+  const { login, password } = req.body;
+  if (!login || !password) {
+    return res.render('login', { db: ODOO_DB, error: 'Ingresa usuario y contraseña.' });
   }
   try {
-    const uid = await authenticate(login, apiKey);
+    // Valida la identidad del usuario con su propia contraseña de Odoo.
+    // La API key de ambiente-pruebas.env NO se usa aquí: es el método de
+    // conexión a la base de datos para las consultas (ver odoo-client.js).
+    const uid = await authenticate(login, password);
     if (!uid) {
-      return res.render('login', { db: ODOO_DB, error: 'Credenciales inválidas.' });
+      return res.render('login', { db: ODOO_DB, error: 'Usuario o contraseña inválidos.' });
     }
-    req.session.usuario = { uid, login, apiKey };
+    req.session.usuario = { uid, login };
     res.redirect('/tableros');
   } catch (err) {
     res.render('login', { db: ODOO_DB, error: `Error al conectar con Odoo: ${err.message || err}` });

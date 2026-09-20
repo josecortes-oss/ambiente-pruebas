@@ -5,31 +5,30 @@ const { executeKw } = require('../odoo-client');
 
 const router = express.Router();
 
-async function esAdministrador(credentials) {
+async function esAdministrador(uid) {
   try {
-    return await executeKw(credentials, 'res.users', 'has_group', [credentials.uid, 'base.group_system']);
+    return await executeKw('res.users', 'has_group', [uid, 'base.group_system']);
   } catch {
     return false;
   }
 }
 
 router.get('/tableros', requireAuth, async (req, res) => {
-  const credentials = req.session.usuario;
+  const usuario = req.session.usuario;
   try {
-    const definiciones = await loadValidatedDefinitions(credentials);
-    const esAdmin = await esAdministrador(credentials);
+    const definiciones = await loadValidatedDefinitions();
+    const esAdmin = await esAdministrador(usuario.uid);
     const visibles = definiciones.filter((d) => d.valido);
     const invalidos = esAdmin ? definiciones.filter((d) => !d.valido) : [];
-    res.render('tableros-lista', { usuario: credentials, visibles, invalidos, esAdmin });
+    res.render('tableros-lista', { usuario, visibles, invalidos, esAdmin });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al cargar tableros: ${err.message || err}` });
   }
 });
 
 router.get('/tableros/:id', requireAuth, async (req, res) => {
-  const credentials = req.session.usuario;
   try {
-    const def = await getValidatedDefinition(req.params.id, credentials);
+    const def = await getValidatedDefinition(req.params.id);
     if (!def) return res.status(404).render('error', { mensaje: 'Tablero no encontrado.' });
     if (!def.valido) {
       return res.status(422).render('error', {
@@ -38,7 +37,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
     }
 
     const campos = def.campos.map((c) => (typeof c === 'string' ? c : c.campo));
-    const filas = await executeKw(credentials, def.modelo, 'search_read', [def.dominio || []], {
+    const filas = await executeKw(def.modelo, 'search_read', [def.dominio || []], {
       fields: campos,
       limit: def.limite || 80,
       order: def.orden || '',
