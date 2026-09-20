@@ -1,202 +1,249 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const Anthropic = require('@anthropic-ai/sdk');
 const { executeKw } = require('./odoo-client');
 const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
+const { obtenerDatosVentasMensuales, PERIODOS } = require('./ventas-mensual');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
-const MODEL = 'claude-opus-5';
 
-let clientePromesa = null;
-function obtenerCliente() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('Falta ANTHROPIC_API_KEY en ambiente-pruebas.env para usar el chat.');
-  }
-  if (!clientePromesa) clientePromesa = new Anthropic();
-  return clientePromesa;
+const MAPA_ACENTOS = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n', Á: 'A', É: 'E', Í: 'I', Ó: 'O', Ú: 'U', Ñ: 'N' };
+// No pasa a minúsculas: hay que preservar mayúsculas en texto libre (títulos,
+// nombres). Los patrones de comando se comparan sin distinguir mayúsculas
+// (ver flag "i" al hacer match), así que esto no afecta el reconocimiento.
+function normalizar(texto) {
+  return texto
+    .trim()
+    .replace(/[áéíóúñÁÉÍÓÚÑ]/g, (c) => MAPA_ACENTOS[c])
+    .replace(/^[¿¡]+/, '')
+    .replace(/[?!.]+$/, '')
+    .replace(/\s+/g, ' ');
 }
 
-const TOOLS = [
+const FRASE_A_PERIODO = {
+  'este mes': 'este_mes',
+  'mes anterior': 'mes_anterior',
+  'este ano': 'este_anio',
+  'ano anterior': 'anio_anterior',
+  'todo el historico': 'todos',
+  todo: 'todos',
+  historico: 'todos',
+};
+
+function periodoDesdeFrase(frase) {
+  if (!frase) return 'este_mes';
+  return FRASE_A_PERIODO[frase.trim().toLowerCase()] || 'este_mes';
+}
+
+function etiquetaPeriodo(clave) {
+  return (PERIODOS.find((p) => p.clave === clave) || {}).etiqueta || clave;
+}
+
+function formatearEntradas(grafico) {
+  if (!grafico.entradas.length) return 'Sin datos para ese período.';
+  return grafico.entradas
+    .map(([etiqueta, valor], i) => `${i + 1}. ${etiqueta}: ${valor.toLocaleString('es-CL', { maximumFractionDigits: 2 })}`)
+    .join('\n');
+}
+
+function cargarTablero(id) {
+  const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
+  if (!fs.existsSync(archivo)) return null;
+  const def = yaml.load(fs.readFileSync(archivo, 'utf8'));
+  def._id = id;
+  return def;
+}
+
+async function guardarSiValido(id, def) {
+  const validacion = await validateDefinition(def);
+  if (!validacion.valido) {
+    return { ok: false, mensaje: `No se pudo guardar "${id}", falló la evaluación semántica:\n${validacion.errores.join('\n')}` };
+  }
+  const { _id, ...definicionLimpia } = def;
+  fs.writeFileSync(path.join(TABLEROS_DIR, `${id}.yaml`), yaml.dump(definicionLimpia), 'utf8');
+  return { ok: true };
+}
+
+const AYUDA = `Comandos disponibles:
+- listar tableros
+- campos de <modelo>                              (ej. campos de sale.order)
+- top productos [de <período>]
+- top clientes [de <período>]
+- ventas por vendedor [de <período>]
+- ventas de <período>                             (períodos: este mes, mes anterior, este año, año anterior, todo)
+- crear tablero <id>: modelo <modelo>, campos <c1,c2,...>[, titulo <texto>]
+- agregar campo <campo> a <id>
+- quitar campo <campo> de <id>
+- agregar grafico a <id>: agrupar por <campo> midiendo <campo>
+- eliminar tablero <id>
+(El tablero "ventas" es de tipo especial y no se puede editar por chat.)`;
+
+const COMANDOS = [
   {
-    name: 'listar_tableros',
-    description:
-      'Lista los tableros actualmente definidos (id, título, modelo(s), tipo, campos y gráfico si tienen). ' +
-      'Úsalo primero para saber qué existe antes de proponer un cambio.',
-    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+    patron: /^ayuda$|^help$/,
+    accion: async () => AYUDA,
   },
   {
-    name: 'obtener_esquema',
-    description:
-      'Devuelve los campos reales de un modelo de Odoo (nombre técnico, etiqueta y tipo), consultando la ' +
-      'conexión de servicio. Úsalo para verificar que un campo existe antes de usarlo en un tablero o consulta ' +
-      '(esta es la información semántica contra la que se valida todo).',
-    input_schema: {
-      type: 'object',
-      properties: { modelo: { type: 'string', description: 'Nombre técnico del modelo, ej. sale.order' } },
-      required: ['modelo'],
-      additionalProperties: false,
+    patron: /^listar tableros$/,
+    accion: async () => {
+      const definiciones = await loadValidatedDefinitions();
+      return definiciones
+        .map((d) => `- ${d._id}: "${d.titulo || d._id}" (${d.tipo || d.modelo}) ${d.valido ? '' : '[INVALIDO]'}`)
+        .join('\n');
     },
   },
   {
-    name: 'consultar_datos',
-    description:
-      'Ejecuta una consulta de solo lectura contra Odoo (vía la conexión de servicio) para responder preguntas ' +
-      'sobre los datos. Sin agrupar_por/medir hace un search_read normal; con ambos hace una agregación ' +
-      '(read_group) sumando "medir" agrupado por "agrupar_por".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        modelo: { type: 'string' },
-        dominio: { type: 'array', items: {}, description: 'Dominio Odoo, ej. [["state","=","sale"]]. [] si no aplica.' },
-        campos: { type: 'array', items: { type: 'string' } },
-        agrupar_por: { type: 'string' },
-        medir: { type: 'string' },
-        limite: { type: 'integer' },
-      },
-      required: ['modelo', 'dominio', 'campos'],
-      additionalProperties: false,
+    patron: /^(?:mostrar )?campos de ([\w.]+)$/,
+    accion: async ([, modeloBruto]) => {
+      const modelo = modeloBruto.toLowerCase();
+      const fieldsGet = await executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+      const campos = Object.entries(fieldsGet);
+      const listado = campos
+        .slice(0, 40)
+        .map(([campo, info]) => `- ${campo} (${info.type}): ${info.string}`)
+        .join('\n');
+      const extra = campos.length > 40 ? `\n... y ${campos.length - 40} campos más.` : '';
+      return `Campos de ${modelo}:\n${listado}${extra}`;
     },
   },
   {
-    name: 'guardar_tablero',
-    description:
-      'Crea o reemplaza un tablero genérico escribiendo tableros/<id>.yaml, con las claves modelo/campos/' +
-      'dominio/orden/limite/grafico/titulo/modulo/posicion (mismo formato que los tableros ya definidos). ' +
-      'El contenido pasa por la misma evaluación semántica que usa la app (existencia real de modelo y campos ' +
-      'en Odoo) ANTES de guardarse; si falla, no se escribe nada y se devuelven los errores para corregir. ' +
-      'No uses esta herramienta para el tablero "ventas" (tipo ventas_mensual): tiene lógica propia en código ' +
-      'y reemplazar su YAML por uno genérico lo rompería.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Id del tablero = nombre de archivo sin extensión, ej. "compras"' },
-        yaml_texto: { type: 'string', description: 'Contenido YAML completo del tablero' },
-      },
-      required: ['id', 'yaml_texto'],
-      additionalProperties: false,
+    patron: /^top productos(?: de (este mes|mes anterior|este ano|ano anterior|todo el historico|todo))?$/,
+    accion: async ([, frase]) => {
+      const periodo = periodoDesdeFrase(frase);
+      const datos = await obtenerDatosVentasMensuales({ periodo, empresaId: null, vendedorId: null });
+      return `Top productos (${etiquetaPeriodo(periodo)}):\n${formatearEntradas(datos.graficoProductos)}`;
+    },
+  },
+  {
+    patron: /^top clientes(?: de (este mes|mes anterior|este ano|ano anterior|todo el historico|todo))?$/,
+    accion: async ([, frase]) => {
+      const periodo = periodoDesdeFrase(frase);
+      const datos = await obtenerDatosVentasMensuales({ periodo, empresaId: null, vendedorId: null });
+      return `Top clientes (${etiquetaPeriodo(periodo)}):\n${formatearEntradas(datos.graficoClientes)}`;
+    },
+  },
+  {
+    patron: /^ventas por vendedor(?: de (este mes|mes anterior|este ano|ano anterior|todo el historico|todo))?$/,
+    accion: async ([, frase]) => {
+      const periodo = periodoDesdeFrase(frase);
+      const datos = await obtenerDatosVentasMensuales({ periodo, empresaId: null, vendedorId: null });
+      return `Ventas por vendedor (${etiquetaPeriodo(periodo)}):\n${formatearEntradas(datos.graficoVendedores)}`;
+    },
+  },
+  {
+    patron: /^ventas de (este mes|mes anterior|este ano|ano anterior|todo el historico|todo)$/,
+    accion: async ([, frase]) => {
+      const periodo = periodoDesdeFrase(frase);
+      const datos = await obtenerDatosVentasMensuales({ periodo, empresaId: null, vendedorId: null });
+      const total = datos.filas.reduce((acc, f) => acc + (f.amount_total || 0), 0);
+      return `Ventas ${etiquetaPeriodo(periodo)}: ${datos.filas.length} órdenes, total ${total.toLocaleString('es-CL', { maximumFractionDigits: 2 })}.`;
+    },
+  },
+  {
+    patron: /^crear tablero ([\w-]+): modelo ([\w.]+), campos ([\w., ]+?)(?:, titulo (.+))?$/,
+    accion: async ([, idBruto, modeloBruto, camposTexto, titulo], { tableroModificado }) => {
+      const id = idBruto.toLowerCase();
+      const modelo = modeloBruto.toLowerCase();
+      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede crear/reemplazar por chat.';
+      const campos = camposTexto.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+      const def = {
+        titulo: titulo || id,
+        modelo,
+        campos: campos.map((c) => ({ campo: c, etiqueta: c })),
+        dominio: [],
+        limite: 80,
+        posicion: 99,
+      };
+      const resultado = await guardarSiValido(id, def);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok ? `Tablero "${id}" creado.` : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^agregar campo ([\w.]+) a ([\w-]+)$/,
+    accion: async ([, campoBruto, idBruto], { tableroModificado }) => {
+      const campo = campoBruto.toLowerCase();
+      const id = idBruto.toLowerCase();
+      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      const def = cargarTablero(id);
+      if (!def) return `No existe el tablero "${id}".`;
+      def.campos = def.campos || [];
+      if (def.campos.some((c) => (typeof c === 'string' ? c : c.campo) === campo)) {
+        return `"${campo}" ya está en el tablero "${id}".`;
+      }
+      def.campos.push({ campo, etiqueta: campo });
+      const resultado = await guardarSiValido(id, def);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok ? `Campo "${campo}" agregado a "${id}".` : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^quitar campo ([\w.]+) de ([\w-]+)$/,
+    accion: async ([, campoBruto, idBruto], { tableroModificado }) => {
+      const campo = campoBruto.toLowerCase();
+      const id = idBruto.toLowerCase();
+      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      const def = cargarTablero(id);
+      if (!def) return `No existe el tablero "${id}".`;
+      const antes = (def.campos || []).length;
+      def.campos = (def.campos || []).filter((c) => (typeof c === 'string' ? c : c.campo) !== campo);
+      if (def.campos.length === antes) return `"${campo}" no estaba en el tablero "${id}".`;
+      if (def.campos.length === 0) return `No se puede quitar "${campo}": el tablero necesita al menos un campo.`;
+      const resultado = await guardarSiValido(id, def);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok ? `Campo "${campo}" quitado de "${id}".` : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^agregar grafico a ([\w-]+): agrupar por ([\w.]+) midiendo ([\w.]+)$/,
+    accion: async ([, idBruto, agruparPorBruto, medirBruto], { tableroModificado }) => {
+      const id = idBruto.toLowerCase();
+      const agruparPor = agruparPorBruto.toLowerCase();
+      const medir = medirBruto.toLowerCase();
+      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      const def = cargarTablero(id);
+      if (!def) return `No existe el tablero "${id}".`;
+      def.grafico = { titulo: `${medir} por ${agruparPor}`, agrupar_por: agruparPor, medir };
+      const resultado = await guardarSiValido(id, def);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok ? `Gráfico agregado a "${id}".` : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^eliminar tablero ([\w-]+)$/,
+    accion: async ([, idBruto], { tableroModificado }) => {
+      const id = idBruto.toLowerCase();
+      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede eliminar por chat.';
+      const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
+      if (!fs.existsSync(archivo)) return `No existe el tablero "${id}".`;
+      fs.unlinkSync(archivo);
+      tableroModificado.id = id;
+      return `Tablero "${id}" eliminado.`;
     },
   },
 ];
 
-async function ejecutarHerramienta(nombre, input) {
-  switch (nombre) {
-    case 'listar_tableros': {
-      const definiciones = await loadValidatedDefinitions();
-      return definiciones.map((d) => ({
-        id: d._id,
-        titulo: d.titulo,
-        tipo: d.tipo || 'generico',
-        modelo: d.modelo,
-        campos: d.campos,
-        grafico: d.grafico,
-        valido: d.valido,
-        errores: d.errores,
-      }));
-    }
-    case 'obtener_esquema': {
-      const fieldsGet = await executeKw(input.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
-      return Object.entries(fieldsGet).map(([campo, info]) => ({
-        campo,
-        etiqueta: info.string,
-        tipo: info.type,
-      }));
-    }
-    case 'consultar_datos': {
-      if (input.agrupar_por && input.medir) {
-        return executeKw(input.modelo, 'read_group', [input.dominio, [input.medir], [input.agrupar_por]], {
-          orderby: `${input.medir} desc`,
-          limit: input.limite || 20,
-        });
-      }
-      return executeKw(input.modelo, 'search_read', [input.dominio], {
-        fields: input.campos,
-        limit: input.limite || 50,
-      });
-    }
-    case 'guardar_tablero': {
-      if (input.id === 'ventas') {
-        return { guardado: false, errores: ['El tablero "ventas" es de tipo especial; no se puede sobrescribir así.'] };
-      }
-      let def;
+async function responderChat(mensaje) {
+  const normalizado = normalizar(mensaje);
+  const tableroModificado = { id: null };
+
+  for (const { patron, accion } of COMANDOS) {
+    const patronSinDistinguirMayus = patron.flags.includes('i') ? patron : new RegExp(patron.source, `${patron.flags}i`);
+    const coincidencia = normalizado.match(patronSinDistinguirMayus);
+    if (coincidencia) {
       try {
-        def = yaml.load(input.yaml_texto);
-        def._id = input.id;
+        const respuesta = await accion(coincidencia, { tableroModificado });
+        return { respuesta, tableroModificado: tableroModificado.id };
       } catch (err) {
-        return { guardado: false, errores: [`YAML inválido: ${err.message}`] };
-      }
-      const validacion = await validateDefinition(def);
-      if (!validacion.valido) {
-        return { guardado: false, errores: validacion.errores };
-      }
-      fs.writeFileSync(path.join(TABLEROS_DIR, `${input.id}.yaml`), input.yaml_texto, 'utf8');
-      return { guardado: true, id: input.id };
-    }
-    default:
-      throw new Error(`Herramienta desconocida: ${nombre}`);
-  }
-}
-
-const SYSTEM_PROMPT = `Eres el asistente del panel de tableros Odoo de este equipo. Ayudas de dos formas:
-
-1. Responder preguntas sobre los datos de ventas/compras (usa consultar_datos; agrupa con agrupar_por+medir
-   cuando pidan un top o un total por categoría).
-2. Proponer y aplicar cambios a los tableros definidos como archivos YAML (usa guardar_tablero).
-
-Reglas importantes:
-- Nunca inventes nombres de campo o de modelo: antes de usarlos en consultar_datos o guardar_tablero, verifica
-  con obtener_esquema que existen de verdad en Odoo. Esa es la única fuente de verdad semántica.
-- Usa listar_tableros para ver qué hay antes de crear o modificar algo, y para no duplicar tableros.
-- guardar_tablero ya valida contra Odoo antes de escribir el archivo; si devuelve errores, corrige el YAML y
-  vuelve a intentar en el mismo turno, no le pidas al usuario que lo arregle él.
-- El tablero "ventas" es de tipo especial (ventas_mensual, con filtros y gráficos definidos en código); no lo
-  reescribas con guardar_tablero.
-- Sé breve y concreto en tus respuestas finales; si aplicaste un cambio, dilo en una frase y nombra el archivo.`;
-
-async function responderChat(mensajes) {
-  const client = obtenerCliente();
-  const historial = [...mensajes];
-  let tableroModificado = null;
-
-  for (let iteracion = 0; iteracion < 8; iteracion++) {
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS,
-      messages: historial,
-    });
-
-    historial.push({ role: 'assistant', content: response.content });
-
-    if (response.stop_reason !== 'tool_use') {
-      const texto = response.content
-        .filter((b) => b.type === 'text')
-        .map((b) => b.text)
-        .join('\n');
-      return { respuesta: texto || '(sin respuesta)', historial, tableroModificado };
-    }
-
-    const bloquesHerramienta = response.content.filter((b) => b.type === 'tool_use');
-    const resultados = [];
-    for (const bloque of bloquesHerramienta) {
-      try {
-        const resultado = await ejecutarHerramienta(bloque.name, bloque.input);
-        if (bloque.name === 'guardar_tablero' && resultado.guardado) tableroModificado = resultado.id;
-        resultados.push({ type: 'tool_result', tool_use_id: bloque.id, content: JSON.stringify(resultado) });
-      } catch (err) {
-        resultados.push({
-          type: 'tool_result',
-          tool_use_id: bloque.id,
-          is_error: true,
-          content: err.message || String(err),
-        });
+        return { respuesta: `Error ejecutando el comando: ${err.message || err}`, tableroModificado: null };
       }
     }
-    historial.push({ role: 'user', content: resultados });
   }
 
-  return { respuesta: 'No pude completar la solicitud en el número de pasos permitido.', historial, tableroModificado };
+  return {
+    respuesta: `No reconozco ese comando. Escribe "ayuda" para ver la lista de comandos disponibles.`,
+    tableroModificado: null,
+  };
 }
 
 module.exports = { responderChat };

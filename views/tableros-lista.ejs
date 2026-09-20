@@ -27,10 +27,10 @@
 
   <div class="chat-panel">
     <h3>Asistente de tableros</h3>
-    <p class="subt">Pregunta sobre los datos o pide cambios a un tablero (ej. "agrega un filtro por producto a compras"). Los cambios se validan contra Odoo antes de guardarse.</p>
+    <p class="subt">Comandos de texto fijos (sin IA): consulta datos o modifica tableros genéricos. Escribe <strong>ayuda</strong> para ver la lista completa. Los cambios se validan contra Odoo antes de guardarse.</p>
     <div class="chat-mensajes" id="chat-mensajes"></div>
     <form id="chat-form" class="chat-form">
-      <input type="text" id="chat-input" placeholder="Escribe tu mensaje..." autocomplete="off" />
+      <input type="text" id="chat-input" placeholder='Ej. "top clientes" o "ayuda"' autocomplete="off" />
       <button type="submit" id="chat-enviar">Enviar</button>
     </form>
   </div>
