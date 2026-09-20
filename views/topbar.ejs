@@ -1,0 +1,44 @@
+<header class="topbar">
+  <a class="brand" href="/tableros">
+    <div class="brand-mark" aria-hidden="true">T</div>
+    <div class="brand-copy"><strong>Tableros Odoo</strong><span>Semantic Builder</span></div>
+  </a>
+  <div class="tabs">
+    <% tabs.forEach((t) => { %>
+      <a class="tab <%= t._id === activoId ? 'activo' : '' %>" href="/tableros/<%= t._id %>"><%= t.titulo || t._id %></a>
+    <% }) %>
+  </div>
+  <div class="top-actions">
+    <% if (esAdmin && invalidos.length > 0) { %>
+      <span class="badge-alerta" title="<%= invalidos.map((i) => (i.titulo || i._id) + ': ' + i.errores.join(' / ')).join('\n') %>">⚠ <%= invalidos.length %> inválido<%= invalidos.length === 1 ? '' : 's' %></span>
+    <% } %>
+    <button class="icon-button" id="btn-deshacer" type="button" <%= cambioPendiente ? '' : 'disabled' %> title="<%= cambioPendiente ? cambioPendiente.descripcion : 'Aún no hay cambios para deshacer' %>">↺ Deshacer</button>
+    <button class="icon-button" id="btn-historial" type="button">🕘 Historial</button>
+    <a class="icon-button" href="/logout">Salir</a>
+  </div>
+</header>
+<script>
+  (function () {
+    var btnHistorial = document.getElementById('btn-historial');
+    if (btnHistorial) {
+      btnHistorial.addEventListener('click', function () {
+        document.dispatchEvent(new CustomEvent('abrir-historial'));
+      });
+    }
+    var btn = document.getElementById('btn-deshacer');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      fetch('/chat/deshacer', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            window.location.reload();
+          } else {
+            alert(data.mensaje || 'No se pudo deshacer.');
+          }
+        })
+        .catch(function (err) { alert('Error de conexión: ' + err.message); });
+    });
+  })();
+</script>

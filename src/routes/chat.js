@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('./auth');
-const { responderChat } = require('../chat');
+const { responderChat, deshacerUltimoCambio } = require('../chat');
 
 const router = express.Router();
 
@@ -14,6 +14,10 @@ router.post('/chat', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }
+});
+
+router.post('/chat/deshacer', requireAuth, (req, res) => {
+  res.json(deshacerUltimoCambio());
 });
 
 module.exports = router;

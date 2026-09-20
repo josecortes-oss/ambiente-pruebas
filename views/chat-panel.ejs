@@ -1,0 +1,70 @@
+<section class="chat-panel">
+  <div class="chat-header">
+    <div class="agent">
+      <div class="agent-avatar" aria-hidden="true">T</div>
+      <div class="agent-copy"><strong>Asistente de tableros</strong><span>Comandos fijos · sin IA</span></div>
+    </div>
+    <span class="secure-pill">✓ Conexión de servicio</span>
+  </div>
+  <div class="chat-log" id="chat-log"></div>
+  <form class="composer" id="chat-form">
+    <button class="quick-prompt" type="button" id="quick-prompt">ayuda</button>
+    <div class="input-wrap">
+      <input class="chat-input" id="chat-input" type="text" autocomplete="off" placeholder='Ej. "top clientes" o "ayuda"' />
+      <button class="send-button" type="submit" id="chat-enviar" aria-label="Enviar">➤</button>
+    </div>
+    <p class="composer-note">Consulta datos o edita tableros genéricos; los cambios se validan contra Odoo antes de guardarse.</p>
+  </form>
+</section>
+<script>
+  (function () {
+    var lista = document.getElementById('chat-log');
+    var form = document.getElementById('chat-form');
+    var input = document.getElementById('chat-input');
+    var boton = document.getElementById('chat-enviar');
+    var quickPrompt = document.getElementById('quick-prompt');
+
+    function agregarMensaje(texto, clase) {
+      var wrap = document.createElement('div');
+      wrap.className = 'msg ' + clase;
+      var bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = texto;
+      wrap.appendChild(bubble);
+      lista.appendChild(wrap);
+      lista.scrollTop = lista.scrollHeight;
+    }
+
+    function enviar(mensaje) {
+      mensaje = mensaje.trim();
+      if (!mensaje) return;
+      agregarMensaje(mensaje, 'usuario');
+      boton.disabled = true;
+      fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: mensaje }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) { agregarMensaje('Error: ' + data.error, 'sistema'); return; }
+          agregarMensaje(data.respuesta, 'asistente');
+          if (data.tableroModificado) {
+            agregarMensaje('Tablero "' + data.tableroModificado + '" actualizado. Recarga la página para verlo. "Deshacer" ya está disponible arriba.', 'sistema');
+            var btnDeshacer = document.getElementById('btn-deshacer');
+            if (btnDeshacer) btnDeshacer.disabled = false;
+          }
+        })
+        .catch(function (err) { agregarMensaje('Error de conexión: ' + err.message, 'sistema'); })
+        .finally(function () { boton.disabled = false; input.focus(); });
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var mensaje = input.value.trim();
+      input.value = '';
+      enviar(mensaje);
+    });
+    quickPrompt.addEventListener('click', function () { enviar(quickPrompt.textContent); });
+  })();
+</script>

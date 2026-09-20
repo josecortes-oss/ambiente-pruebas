@@ -63,10 +63,11 @@ a la base de datos.
    en `/tableros`, la lista de tableros inválidos junto con el motivo exacto
    del error, para poder corregir el archivo YAML.
 
-5. **Orden de la lista**: cada tablero puede declarar `posicion` (número) para
-   fijar su lugar en `/tableros`; a igual `posicion` se ordenan por nombre de
-   archivo. Sin `posicion`, un tablero queda al final. Orden actual: Ventas
-   (1, tablero inicial), Órdenes de Compra (2).
+5. **Orden de las pestañas**: cada tablero puede declarar `posicion` (número)
+   para fijar su lugar entre las pestañas del workspace; a igual `posicion` se
+   ordenan por nombre de archivo. Sin `posicion`, un tablero queda al final.
+   Orden actual: Ventas (1, pestaña inicial — `/tableros` redirige ahí),
+   Órdenes de Compra (2).
 
 6. **Ventas** (`tableros/ventas.yaml`, `tipo: ventas_mensual`): es el único
    tablero con lógica propia (en `src/ventas-mensual.js`), porque combina dos
@@ -104,6 +105,23 @@ a la base de datos.
 
    Ver la lista completa de comandos escribiendo `ayuda` en el chat, o en la constante
    `AYUDA` de `src/chat.js`.
+
+8. **Diseño del workspace** (`views/layout-head.ejs`, `views/topbar.ejs`,
+   `views/chat-panel.ejs`, `views/inspector.ejs`): cada tablero se ve como un
+   workspace de 3 columnas — chat a la izquierda, el tablero (filtros, KPIs,
+   gráficos, tabla) al centro, y un panel inspector a la derecha que se abre
+   al hacer click en un gráfico marcado como `card selectable`. El inspector
+   muestra el contexto semántico real de ese gráfico (métrica, dimensión,
+   modelo, archivo donde está definido) tomado directamente de sus atributos
+   `data-*`, que la ruta rellena con los valores reales del `grafico` del
+   tablero — no hay una copia paralela de esa información.
+9. **Deshacer / Historial** (`src/chat.js`: `registrarRespaldo`,
+   `obtenerUltimoCambio`, `deshacerUltimoCambio`; ruta `POST /chat/deshacer`):
+   antes de que un comando de chat escriba o borre un archivo de tablero, se
+   guarda en memoria el contenido anterior (o `null` si el tablero no
+   existía). El botón **Deshacer** del topbar restaura ese único respaldo —
+   es un nivel, no un historial multi-versión — y el botón **Historial**
+   muestra en el inspector cuál fue el último cambio pendiente de deshacer.
 
 ### Agregar un nuevo tablero
 

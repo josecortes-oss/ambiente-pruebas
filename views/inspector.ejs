@@ -1,0 +1,67 @@
+<aside class="inspector" id="inspector" hidden>
+  <div class="inspector-inner">
+    <div class="inspector-head"><h2 id="inspector-titulo">Componente</h2><button class="close-button" id="cerrar-inspector" type="button">✕</button></div>
+    <div class="inspector-body">
+      <div id="panel-componente"></div>
+      <div id="panel-historial" hidden>
+        <% if (cambioPendiente) { %>
+          <div class="version-item actual"><div class="version-top">Último cambio<span>Sin deshacer</span></div><p><%= cambioPendiente.descripcion %></p></div>
+        <% } else { %>
+          <div class="version-item actual"><div class="version-top">Estado actual<span>Sin cambios</span></div><p>No hay cambios del chat pendientes de deshacer.</p></div>
+        <% } %>
+        <div class="prop-group"><h3>Cómo funciona</h3></div>
+        <p style="color:var(--muted);font-size:11px;line-height:1.5">Cada vez que el chat crea, edita o elimina un tablero, la app guarda una copia de la versión anterior antes de escribir. "Deshacer" (arriba) restaura esa única copia — no es un historial multi-versión.</p>
+      </div>
+    </div>
+  </div>
+</aside>
+<div class="toast" id="toast"><span id="toast-texto"></span></div>
+<script>
+  (function () {
+    var shell = document.getElementById('shell');
+    var inspector = document.getElementById('inspector');
+    var inspectorTitulo = document.getElementById('inspector-titulo');
+    var panelComponente = document.getElementById('panel-componente');
+    var panelHistorial = document.getElementById('panel-historial');
+
+    function abrirComponente(el) {
+      document.querySelectorAll('.card.selectable').forEach(function (c) { c.classList.toggle('seleccionado', c === el); });
+      inspectorTitulo.textContent = 'Componente';
+      var d = el.dataset;
+      panelComponente.innerHTML =
+        '<div class="selection-card"><span class="selection-type">' + d.tipo + '</span><strong>' + d.titulo + '</strong>' +
+        '<span class="selection-id">grafico.agrupar_por=' + d.dimensionCampo + '</span></div>' +
+        '<div class="prop-group"><h3>Contexto semántico</h3>' +
+        '<div class="prop-row"><span>Métrica</span><strong>' + d.metrica + '</strong></div>' +
+        '<div class="prop-row"><span>Dimensión</span><strong>' + d.dimension + '</strong></div>' +
+        '<div class="prop-row"><span>Modelo</span><strong>' + d.modelo + '</strong></div>' +
+        '<div class="prop-row"><span>Definido en</span><strong>' + d.definidoEn + '</strong></div></div>' +
+        '<div class="context-note"><strong>De dónde sale esto</strong>Este panel refleja el bloque "grafico" real del tablero, validado con fields_get antes de mostrarse.</div>';
+      panelComponente.hidden = false;
+      panelHistorial.hidden = true;
+      shell.classList.add('inspector-abierto');
+      inspector.hidden = false;
+    }
+
+    function abrirHistorial() {
+      document.querySelectorAll('.card.selectable').forEach(function (c) { c.classList.remove('seleccionado'); });
+      inspectorTitulo.textContent = 'Historial de cambios';
+      panelComponente.hidden = true;
+      panelHistorial.hidden = false;
+      shell.classList.add('inspector-abierto');
+      inspector.hidden = false;
+    }
+
+    function cerrar() {
+      shell.classList.remove('inspector-abierto');
+      inspector.hidden = true;
+      document.querySelectorAll('.card.selectable').forEach(function (c) { c.classList.remove('seleccionado'); });
+    }
+
+    document.querySelectorAll('.card.selectable').forEach(function (el) {
+      el.addEventListener('click', function () { abrirComponente(el); });
+    });
+    document.getElementById('cerrar-inspector').addEventListener('click', cerrar);
+    document.addEventListener('abrir-historial', abrirHistorial);
+  })();
+</script>

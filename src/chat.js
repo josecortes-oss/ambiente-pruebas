@@ -54,13 +54,43 @@ function cargarTablero(id) {
   return def;
 }
 
+// Respaldo de un solo nivel: antes de que el chat escriba o borre un tablero,
+// guarda el contenido anterior aquí. "Deshacer" restaura ese único respaldo
+// (no es un historial multi-versión, solo el último cambio).
+let ultimoRespaldo = null;
+
+function registrarRespaldo(id, contenidoAnterior, descripcion) {
+  ultimoRespaldo = { id, contenidoAnterior, descripcion };
+}
+
+function obtenerUltimoCambio() {
+  return ultimoRespaldo;
+}
+
+function deshacerUltimoCambio() {
+  if (!ultimoRespaldo) return { ok: false, mensaje: 'No hay cambios para deshacer.' };
+  const { id, contenidoAnterior } = ultimoRespaldo;
+  const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
+  if (contenidoAnterior === null) {
+    if (fs.existsSync(archivo)) fs.unlinkSync(archivo);
+  } else {
+    fs.writeFileSync(archivo, contenidoAnterior, 'utf8');
+  }
+  const id_ = ultimoRespaldo.id;
+  ultimoRespaldo = null;
+  return { ok: true, mensaje: `Se deshizo el último cambio en "${id_}".`, id: id_ };
+}
+
 async function guardarSiValido(id, def) {
   const validacion = await validateDefinition(def);
   if (!validacion.valido) {
     return { ok: false, mensaje: `No se pudo guardar "${id}", falló la evaluación semántica:\n${validacion.errores.join('\n')}` };
   }
+  const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
+  const contenidoAnterior = fs.existsSync(archivo) ? fs.readFileSync(archivo, 'utf8') : null;
   const { _id, ...definicionLimpia } = def;
-  fs.writeFileSync(path.join(TABLEROS_DIR, `${id}.yaml`), yaml.dump(definicionLimpia), 'utf8');
+  fs.writeFileSync(archivo, yaml.dump(definicionLimpia), 'utf8');
+  registrarRespaldo(id, contenidoAnterior, `Editado por chat: "${id}"`);
   return { ok: true };
 }
 
@@ -216,7 +246,9 @@ const COMANDOS = [
       if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede eliminar por chat.';
       const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
       if (!fs.existsSync(archivo)) return `No existe el tablero "${id}".`;
+      const contenidoAnterior = fs.readFileSync(archivo, 'utf8');
       fs.unlinkSync(archivo);
+      registrarRespaldo(id, contenidoAnterior, `Eliminado por chat: "${id}"`);
       tableroModificado.id = id;
       return `Tablero "${id}" eliminado.`;
     },
@@ -246,4 +278,4 @@ async function responderChat(mensaje) {
   };
 }
 
-module.exports = { responderChat };
+module.exports = { responderChat, obtenerUltimoCambio, deshacerUltimoCambio };

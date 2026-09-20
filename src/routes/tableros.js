@@ -3,6 +3,7 @@ const { requireAuth } = require('./auth');
 const { loadValidatedDefinitions, getValidatedDefinition } = require('../tableros');
 const { executeKw } = require('../odoo-client');
 const { PERIODOS, obtenerDatosVentasMensuales } = require('../ventas-mensual');
+const { obtenerUltimoCambio } = require('../chat');
 
 const router = express.Router();
 
@@ -14,14 +15,23 @@ async function esAdministrador(uid) {
   }
 }
 
+/** Datos comunes que necesita el topbar en cualquier página del workspace. */
+async function datosTopbar(usuario, activoId) {
+  const definiciones = await loadValidatedDefinitions();
+  const esAdmin = await esAdministrador(usuario.uid);
+  const tabs = definiciones.filter((d) => d.valido);
+  const invalidos = esAdmin ? definiciones.filter((d) => !d.valido) : [];
+  return { tabs, activoId, esAdmin, invalidos, cambioPendiente: obtenerUltimoCambio() };
+}
+
 router.get('/tableros', requireAuth, async (req, res) => {
-  const usuario = req.session.usuario;
   try {
     const definiciones = await loadValidatedDefinitions();
-    const esAdmin = await esAdministrador(usuario.uid);
-    const visibles = definiciones.filter((d) => d.valido);
-    const invalidos = esAdmin ? definiciones.filter((d) => !d.valido) : [];
-    res.render('tableros-lista', { usuario, visibles, invalidos, esAdmin });
+    const primero = definiciones.find((d) => d.valido);
+    if (!primero) {
+      return res.status(500).render('error', { mensaje: 'No hay tableros válidos configurados.' });
+    }
+    res.redirect(`/tableros/${primero._id}`);
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al cargar tableros: ${err.message || err}` });
   }
@@ -36,6 +46,8 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         mensaje: `Este tablero no pasó la evaluación semántica y no puede mostrarse:\n${def.errores.join('\n')}`,
       });
     }
+
+    const topbar = await datosTopbar(req.session.usuario, def._id);
 
     if (def.tipo === 'ventas_mensual') {
       const periodo = req.query.periodo || 'este_mes';
@@ -52,7 +64,17 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         state: fila.state,
       }));
 
+      const total = datos.filas.reduce((acc, f) => acc + (f.amount_total || 0), 0);
+      const mejorVendedor = datos.graficoVendedores.entradas[0];
+      const kpis = {
+        total,
+        cantidad: datos.filas.length,
+        ticketPromedio: datos.filas.length ? total / datos.filas.length : 0,
+        mejorVendedor: mejorVendedor ? { nombre: mejorVendedor[0], valor: mejorVendedor[1] } : null,
+      };
+
       return res.render('ventas-mensual', {
+        ...topbar,
         def,
         periodos: PERIODOS,
         filtros: { periodo, empresaId, vendedorId },
@@ -62,6 +84,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         graficoVendedores: datos.graficoVendedores,
         graficoProductos: datos.graficoProductos,
         filas: filasFormateadas,
+        kpis,
       });
     }
 
@@ -110,7 +133,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       return formateada;
     });
 
-    res.render('tablero-detalle', { def, columnas, filas: filasFormateadas, grafico });
+    res.render('tablero-detalle', { ...topbar, def, columnas, filas: filasFormateadas, grafico, totalRegistros: filas.length });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al ejecutar el tablero: ${err.message || err}` });
   }
