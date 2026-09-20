@@ -1,0 +1,15 @@
+<%- include('layout-head', { titulo: 'Iniciar sesión' }) %>
+<main>
+  <form method="POST" action="/login">
+    <h2>Tableros Odoo</h2>
+    <small>Base de datos: <strong><%= db %></strong></small>
+    <% if (error) { %><p class="error"><%= error %></p><% } %>
+    <label>Usuario Odoo</label>
+    <input type="text" name="login" required autofocus />
+    <label>API key</label>
+    <input type="password" name="apiKey" required />
+    <button type="submit">Ingresar</button>
+  </form>
+</main>
+</body>
+</html>

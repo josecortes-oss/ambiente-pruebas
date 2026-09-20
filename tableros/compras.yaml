@@ -1,0 +1,17 @@
+titulo: "Órdenes de Compra"
+modulo: compras
+modelo: purchase.order
+campos:
+  - campo: name
+    etiqueta: "Orden"
+  - campo: partner_id
+    etiqueta: "Proveedor"
+  - campo: date_order
+    etiqueta: "Fecha"
+  - campo: amount_total
+    etiqueta: "Total"
+  - campo: state
+    etiqueta: "Estado"
+dominio: []
+orden: "date_order desc"
+limite: 80

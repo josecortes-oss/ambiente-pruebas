@@ -1,0 +1,29 @@
+<%- include('layout-head', { titulo: 'Tableros disponibles' }) %>
+<header>
+  <span>Tableros Odoo</span>
+  <span><%= usuario.login %> · <a href="/logout">Salir</a></span>
+</header>
+<main>
+  <h2>Tableros disponibles</h2>
+  <% if (visibles.length === 0) { %>
+    <p>No hay tableros disponibles para tu usuario.</p>
+  <% } %>
+  <% visibles.forEach((t) => { %>
+    <div class="card">
+      <a href="/tableros/<%= t._id %>"><%= t.titulo || t._id %></a>
+      <div><small><%= t.modelo %><% if (t.modulo) { %> · <%= t.modulo %><% } %></small></div>
+    </div>
+  <% }) %>
+
+  <% if (esAdmin && invalidos.length > 0) { %>
+    <h3>Tableros con errores de evaluación semántica (solo visible para administradores)</h3>
+    <% invalidos.forEach((t) => { %>
+      <div class="card invalido">
+        <strong><%= t.titulo || t._id %></strong> (<%= t._file %>)
+        <p class="error"><%= t.errores.join('\n') %></p>
+      </div>
+    <% }) %>
+  <% } %>
+</main>
+</body>
+</html>

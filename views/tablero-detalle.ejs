@@ -1,0 +1,21 @@
+<%- include('layout-head', { titulo: def.titulo || def._id }) %>
+<header>
+  <span><a href="/tableros">&larr; Tableros</a></span>
+  <span><a href="/logout">Salir</a></span>
+</header>
+<main>
+  <h2><%= def.titulo || def._id %></h2>
+  <p><small>Modelo: <%= def.modelo %> · <%= filas.length %> registros</small></p>
+  <table>
+    <thead>
+      <tr><% columnas.forEach((c) => { %><th><%= c.etiqueta %></th><% }) %></tr>
+    </thead>
+    <tbody>
+      <% filas.forEach((fila) => { %>
+        <tr><% columnas.forEach((c) => { %><td><%= fila[c.campo] %></td><% }) %></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Definición de tablero: editable por el administrador del sistema.
+# "modelo" y cada "campo" se validan contra el esquema real de Odoo
+# (evaluación semántica) antes de que el tablero se muestre a los usuarios.
+titulo: "Órdenes de Venta"
+modulo: ventas
+modelo: sale.order
+campos:
+  - campo: name
+    etiqueta: "Orden"
+  - campo: partner_id
+    etiqueta: "Cliente"
+  - campo: date_order
+    etiqueta: "Fecha"
+  - campo: amount_total
+    etiqueta: "Total"
+  - campo: state
+    etiqueta: "Estado"
+dominio: []
+orden: "date_order desc"
+limite: 80
