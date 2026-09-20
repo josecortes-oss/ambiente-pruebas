@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { executeKw } = require('./odoo-client');
+const odooClient = require('./odoo-client');
 const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
 const { obtenerDatosVentasMensuales, PERIODOS } = require('./ventas-mensual');
 
@@ -126,7 +126,7 @@ const COMANDOS = [
     patron: /^(?:mostrar )?campos de ([\w.]+)$/,
     accion: async ([, modeloBruto]) => {
       const modelo = modeloBruto.toLowerCase();
-      const fieldsGet = await executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+      const fieldsGet = await odooClient.executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
       const campos = Object.entries(fieldsGet);
       const listado = campos
         .slice(0, 40)

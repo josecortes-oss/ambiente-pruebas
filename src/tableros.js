@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
-const { executeKw } = require('./odoo-client');
+const odooClient = require('./odoo-client');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
 
@@ -51,7 +51,7 @@ function extractDomainFields(domain) {
 async function validarCamposModelo(modelo, campos, errors) {
   let fieldsGet;
   try {
-    fieldsGet = await executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+    fieldsGet = await odooClient.executeKw(modelo, 'fields_get', [], { attributes: ['string', 'type'] });
   } catch (err) {
     errors.push(`El modelo "${modelo}" no existe o no es accesible: ${err.message || err}`);
     return;
@@ -100,7 +100,7 @@ async function validateDefinition(def) {
 
   let fieldsGet;
   try {
-    fieldsGet = await executeKw(def.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+    fieldsGet = await odooClient.executeKw(def.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
   } catch (err) {
     return {
       valido: false,

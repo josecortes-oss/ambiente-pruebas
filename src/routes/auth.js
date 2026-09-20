@@ -1,5 +1,6 @@
 const express = require('express');
-const { authenticate, ODOO_DB } = require('../odoo-client');
+const odooClient = require('../odoo-client');
+const { ODOO_DB } = odooClient;
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.post('/login', async (req, res) => {
     // Valida la identidad del usuario con su propia contraseña de Odoo.
     // La API key de ambiente-pruebas.env NO se usa aquí: es el método de
     // conexión a la base de datos para las consultas (ver odoo-client.js).
-    const uid = await authenticate(login, password);
+    const uid = await odooClient.authenticate(login, password);
     if (!uid) {
       return res.render('login', { db: ODOO_DB, error: 'Usuario o contraseña inválidos.' });
     }

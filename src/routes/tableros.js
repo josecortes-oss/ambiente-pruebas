@@ -1,7 +1,7 @@
 const express = require('express');
 const { requireAuth } = require('./auth');
 const { loadValidatedDefinitions, getValidatedDefinition } = require('../tableros');
-const { executeKw } = require('../odoo-client');
+const odooClient = require('../odoo-client');
 const { PERIODOS, obtenerDatosVentasMensuales } = require('../ventas-mensual');
 const { obtenerUltimoCambio } = require('../chat');
 
@@ -9,7 +9,7 @@ const router = express.Router();
 
 async function esAdministrador(uid) {
   try {
-    return await executeKw('res.users', 'has_group', [uid, 'base.group_system']);
+    return await odooClient.executeKw('res.users', 'has_group', [uid, 'base.group_system']);
   } catch {
     return false;
   }
@@ -94,7 +94,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       camposConsulta.add(def.grafico.agrupar_por);
       camposConsulta.add(def.grafico.medir);
     }
-    const filas = await executeKw(def.modelo, 'search_read', [def.dominio || []], {
+    const filas = await odooClient.executeKw(def.modelo, 'search_read', [def.dominio || []], {
       fields: [...camposConsulta],
       limit: def.limite || 80,
       order: def.orden || '',

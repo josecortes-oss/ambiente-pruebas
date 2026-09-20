@@ -141,6 +141,37 @@ npm install
 npm start   # http://localhost:3000
 ```
 
+### Pruebas automatizadas
+
+```bash
+npm test    # node --test test/
+```
+
+Usa el test runner nativo de Node (`node:test` + `node:assert`), sin
+dependencias nuevas. Nunca se conecta a Odoo de verdad: `src/odoo-client.js`
+se expone como objeto (`const odooClient = require('./odoo-client')`, nunca
+desestructurado) precisamente para que los tests puedan reemplazar
+`odooClient.executeKw`/`odooClient.authenticate` con `t.mock.method(...)` y
+quedar completamente aislados de la red.
+
+- **`test/ventas-mensual.test.js`**: `rangoPeriodo` — invariantes de cada
+  período (p. ej. `mes_anterior` termina justo donde empieza `este_mes`),
+  sin necesidad de fijar la fecha del sistema.
+- **`test/tableros.test.js`**: `validateDefinition` — la evaluación semántica
+  en sí: modelo/campo faltante o inexistente, campos usados en `dominio` o en
+  `grafico`, y el tipo especial `ventas_mensual` contra `CAMPOS_POR_TIPO`.
+- **`test/chat.test.js`**: `responderChat` — comandos de consulta (incluida
+  la regresión del bug de normalización que rompía `sale.order` → `saleorder`),
+  y el ciclo completo de edición: crear/agregar/quitar campo, la protección
+  del tablero "ventas", y que `deshacerUltimoCambio` de verdad borre un
+  tablero recién creado y restaure el YAML anterior en una edición. Escribe
+  archivos reales bajo `tableros/` con un id de prueba (`test_tmp_chat`) y
+  los limpia siempre en un hook `after`.
+- **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
+  Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
+  rutas protegidas, login inválido/válido, y que `/tableros` redirige al
+  primer tablero válido con datos reales de la página renderizada.
+
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
 `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a
 la base de datos) y `SESSION_SECRET`. El login de cada persona en el

@@ -1,4 +1,4 @@
-const { executeKw } = require('./odoo-client');
+const odooClient = require('./odoo-client');
 
 const PERIODOS = [
   { clave: 'este_mes', etiqueta: 'Este mes' },
@@ -86,23 +86,23 @@ async function obtenerDatosVentasMensuales({ periodo, empresaId, vendedorId }) {
   const dominioLineas = construirDominioLineas({ periodo, empresaId, vendedorId });
 
   const [empresas, vendedoresDisponibles, filas, porCliente, porVendedor, porProducto] = await Promise.all([
-    executeKw('res.company', 'search_read', [[]], { fields: ['id', 'name'] }),
+    odooClient.executeKw('res.company', 'search_read', [[]], { fields: ['id', 'name'] }),
     // Lista de vendedores independiente del filtro actual, para que elegir
     // uno no haga desaparecer a los demás del selector.
-    executeKw('sale.order', 'read_group', [[], ['user_id'], ['user_id']], {}),
-    executeKw('sale.order', 'search_read', [dominioOrdenes], {
+    odooClient.executeKw('sale.order', 'read_group', [[], ['user_id'], ['user_id']], {}),
+    odooClient.executeKw('sale.order', 'search_read', [dominioOrdenes], {
       fields: ['name', 'partner_id', 'user_id', 'date_order', 'amount_total', 'state'],
       order: 'date_order desc',
       limit: 200,
     }),
-    executeKw('sale.order', 'read_group', [dominioOrdenes, ['amount_total'], ['partner_id']], {
+    odooClient.executeKw('sale.order', 'read_group', [dominioOrdenes, ['amount_total'], ['partner_id']], {
       orderby: 'amount_total desc',
       limit: 10,
     }),
-    executeKw('sale.order', 'read_group', [dominioOrdenes, ['amount_total'], ['user_id']], {
+    odooClient.executeKw('sale.order', 'read_group', [dominioOrdenes, ['amount_total'], ['user_id']], {
       orderby: 'amount_total desc',
     }),
-    executeKw('sale.order.line', 'read_group', [dominioLineas, ['price_subtotal'], ['product_id']], {
+    odooClient.executeKw('sale.order.line', 'read_group', [dominioLineas, ['price_subtotal'], ['product_id']], {
       orderby: 'price_subtotal desc',
       limit: 10,
     }),
@@ -129,4 +129,4 @@ async function obtenerDatosVentasMensuales({ periodo, empresaId, vendedorId }) {
   };
 }
 
-module.exports = { PERIODOS, obtenerDatosVentasMensuales };
+module.exports = { PERIODOS, obtenerDatosVentasMensuales, rangoPeriodo };
