@@ -25,12 +25,12 @@ a la base de datos.
    usuario que inició sesión.
 3. **Tableros como archivos de texto**: cada tablero es un archivo YAML en
    [tableros/](tableros/), editable directamente por el administrador del
-   sistema sin tocar código. Ejemplo (`tableros/ventas.yaml`):
+   sistema sin tocar código. Ejemplo (`tableros/compras.yaml`):
 
    ```yaml
-   titulo: "Órdenes de Venta"
-   modulo: ventas
-   modelo: sale.order
+   titulo: "Órdenes de Compra"
+   modulo: compras
+   modelo: purchase.order
    campos:
      - campo: name
        etiqueta: "Orden"
@@ -40,7 +40,7 @@ a la base de datos.
    orden: "date_order desc"
    limite: 80
    grafico:
-     titulo: "Total vendido por cliente"
+     titulo: "Total comprado por proveedor"
      agrupar_por: partner_id
      medir: amount_total
    ```
@@ -65,13 +65,13 @@ a la base de datos.
 
 5. **Orden de la lista**: cada tablero puede declarar `posicion` (número) para
    fijar su lugar en `/tableros`; a igual `posicion` se ordenan por nombre de
-   archivo. Sin `posicion`, un tablero queda al final. Orden actual: Órdenes
-   de Venta (1), Órdenes de Compra (2), Ventas del Mes (3).
+   archivo. Sin `posicion`, un tablero queda al final. Orden actual: Ventas
+   (1, tablero inicial), Órdenes de Compra (2).
 
-6. **Ventas del Mes** (`tableros/ventas-mes.yaml`, `tipo: ventas_mensual`): es
-   el único tablero con lógica propia (en `src/ventas-mensual.js`), porque
-   combina dos modelos (`sale.order` y `sale.order.line`) y filtros
-   interactivos que el motor genérico de `campos`/`grafico` no soporta:
+6. **Ventas** (`tableros/ventas.yaml`, `tipo: ventas_mensual`): es el único
+   tablero con lógica propia (en `src/ventas-mensual.js`), porque combina dos
+   modelos (`sale.order` y `sale.order.line`) y filtros interactivos que el
+   motor genérico de `campos`/`grafico` no soporta:
    - **Filtros** (por querystring, recargan la página): período (este mes,
      mes anterior, este año, año anterior, todo el histórico), empresa
      (`res.company`) y vendedor (`user_id`). El selector de vendedor siempre
