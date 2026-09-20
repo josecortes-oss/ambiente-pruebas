@@ -40,6 +40,19 @@
     .barra-filtros button { padding: 8px 18px; font-size: 13px; align-self: end; }
     .graficos-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
     .graficos-grid .grafico { margin-bottom: 0; }
+
+    .chat-panel { background: #fff; border-radius: 8px; padding: 16px 18px; margin-top: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .chat-panel h3 { margin: 0 0 4px; font-size: 15px; }
+    .chat-panel .subt { color: #666; font-size: 12px; margin: 0 0 12px; }
+    .chat-mensajes { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; margin-bottom: 12px; padding-right: 4px; }
+    .chat-msg { padding: 8px 12px; border-radius: 8px; font-size: 13px; line-height: 1.4; max-width: 85%; white-space: pre-wrap; }
+    .chat-msg.usuario { background: #2451c9; color: #fff; align-self: flex-end; }
+    .chat-msg.asistente { background: #eceef1; color: #1a1a1a; align-self: flex-start; }
+    .chat-msg.sistema { background: #fdecea; color: #a33; align-self: center; font-size: 12px; }
+    .chat-form { display: flex; gap: 8px; }
+    .chat-form input { flex: 1; margin: 0; }
+    .chat-form button { flex-shrink: 0; }
+    .chat-form button:disabled { opacity: 0.6; cursor: default; }
   </style>
 </head>
 <body>

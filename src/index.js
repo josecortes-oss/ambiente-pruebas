@@ -4,6 +4,7 @@ const express = require('express');
 const session = require('express-session');
 const { router: authRouter } = require('./routes/auth');
 const tablerosRouter = require('./routes/tableros');
+const chatRouter = require('./routes/chat');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +33,7 @@ app.get('/', (req, res) => {
 
 app.use(authRouter);
 app.use(tablerosRouter);
+app.use(chatRouter);
 
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT}`);

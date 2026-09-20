@@ -24,6 +24,68 @@
       </div>
     <% }) %>
   <% } %>
+
+  <div class="chat-panel">
+    <h3>Asistente de tableros</h3>
+    <p class="subt">Pregunta sobre los datos o pide cambios a un tablero (ej. "agrega un filtro por producto a compras"). Los cambios se validan contra Odoo antes de guardarse.</p>
+    <div class="chat-mensajes" id="chat-mensajes"></div>
+    <form id="chat-form" class="chat-form">
+      <input type="text" id="chat-input" placeholder="Escribe tu mensaje..." autocomplete="off" />
+      <button type="submit" id="chat-enviar">Enviar</button>
+    </form>
+  </div>
 </main>
+<script>
+  (function () {
+    var lista = document.getElementById('chat-mensajes');
+    var form = document.getElementById('chat-form');
+    var input = document.getElementById('chat-input');
+    var boton = document.getElementById('chat-enviar');
+
+    function agregarMensaje(texto, clase) {
+      var div = document.createElement('div');
+      div.className = 'chat-msg ' + clase;
+      div.textContent = texto;
+      lista.appendChild(div);
+      lista.scrollTop = lista.scrollHeight;
+    }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var mensaje = input.value.trim();
+      if (!mensaje) return;
+      agregarMensaje(mensaje, 'usuario');
+      input.value = '';
+      boton.disabled = true;
+
+      fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: mensaje }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.error) {
+            agregarMensaje('Error: ' + data.error, 'sistema');
+            return;
+          }
+          agregarMensaje(data.respuesta, 'asistente');
+          if (data.tableroModificado) {
+            agregarMensaje(
+              'Tablero "' + data.tableroModificado + '" actualizado. Recarga la página para verlo.',
+              'sistema'
+            );
+          }
+        })
+        .catch(function (err) {
+          agregarMensaje('Error de conexión: ' + err.message, 'sistema');
+        })
+        .finally(function () {
+          boton.disabled = false;
+          input.focus();
+        });
+    });
+  })();
+</script>
 </body>
 </html>

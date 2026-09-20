@@ -85,6 +85,31 @@ a la base de datos.
      `src/tableros.js` declara qué campos de cada modelo usa este tipo, y se
      verifican con `fields_get` igual que un tablero genérico.
 
+7. **Chat del panel principal** (`/tableros`, `src/chat.js` + `src/routes/chat.js`):
+   usa la API de Claude (`@anthropic-ai/sdk`, modelo `claude-opus-5`) para dos cosas,
+   en la misma conversación:
+   - **Responder preguntas de datos** (ej. "¿quién vendió más en agosto?"), ejecutando
+     consultas de solo lectura contra Odoo (`consultar_datos`, vía la misma conexión
+     de servicio que el resto de la app).
+   - **Crear o modificar tableros genéricos** (ej. "agrega un filtro por producto a
+     compras"), escribiendo el YAML correspondiente (`guardar_tablero`).
+
+   Antes de usar cualquier campo o modelo, el chat puede llamar a `obtener_esquema`
+   (mismo `fields_get` que la evaluación semántica) para no inventar nombres. Y
+   `guardar_tablero` **reutiliza `validateDefinition`** (la misma evaluación semántica
+   de los tableros normales): si el YAML propuesto referencia un campo o modelo que no
+   existe, no se escribe nada y el chat recibe el error para corregirlo, en vez de
+   guardar un tablero roto. El tablero especial "ventas" (`tipo: ventas_mensual`) está
+   explícitamente excluido de `guardar_tablero`, porque su lógica vive en código, no en
+   YAML genérico.
+
+   El historial de la conversación se guarda en la sesión del usuario (`req.session.chat`)
+   y se resetea al cerrar sesión.
+
+   **Requiere `ANTHROPIC_API_KEY` en `ambiente-pruebas.env`** — sin ella, el panel de
+   chat se muestra igual pero cada mensaje devuelve un error explícito en vez de
+   fallar silenciosamente.
+
 ### Agregar un nuevo tablero
 
 Basta con crear un archivo `.yaml` en `tableros/` con `modelo`, `campos` y,
@@ -105,6 +130,6 @@ npm start   # http://localhost:3000
 
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
 `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a
-la base de datos) y `SESSION_SECRET`. El login de cada persona en el
-formulario web usa su propio usuario y contraseña de Odoo, no estas
-variables.
+la base de datos), `SESSION_SECRET` y `ANTHROPIC_API_KEY` (para el chat del
+panel principal). El login de cada persona en el formulario web usa su
+propio usuario y contraseña de Odoo, no estas variables.
