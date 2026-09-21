@@ -82,8 +82,13 @@ a la base de datos.
     historial, para no acoplar la página al chat directamente. Las
     sugerencias se filtran contra `semantica.resolverConcepto` antes de
     mostrarse, para que un concepto renombrado o borrado desde `/semantica`
-    nunca deje un chip roto. Los tableros ya creados siguen accesibles por
-    las pestañas del topbar, como siempre.
+    nunca deje un chip roto. Además de esos chips (que arman un tablero
+    nuevo vía el chat), hay dos atajos (`ATAJOS_HERO`, mismo archivo) que son
+    links normales `<a>` a `/tableros/ventas` y `/tableros/compras` —
+    "Armar Tablero General de Ventas"/"...de Compras" — y muestran de
+    inmediato el tablero general ya armado (punto 6 más abajo), sin pasar
+    por el chat ni por la capa semántica. Los tableros ya creados siguen
+    accesibles por las pestañas del topbar, como siempre.
 
 6. **Tableros de tipo especial** (`src/agregaciones.js` + un módulo por
    tablero): cuando un tablero necesita combinar dos modelos y filtros

@@ -26,11 +26,17 @@
               <% sugerencias.filter((s) => s.modulo === 'ventas').forEach((s) => { %>
                 <button type="button" class="chip" data-comando="<%= s.comando %>">"<%= s.etiqueta %>"</button>
               <% }) %>
+              <% atajos.filter((a) => a.modulo === 'ventas').forEach((a) => { %>
+                <a class="chip" href="<%= a.href %>">"<%= a.etiqueta %>"</a>
+              <% }) %>
             </div>
             <h3>Compras</h3>
             <div class="chips-fila">
               <% sugerencias.filter((s) => s.modulo === 'compras').forEach((s) => { %>
                 <button type="button" class="chip" data-comando="<%= s.comando %>">"<%= s.etiqueta %>"</button>
+              <% }) %>
+              <% atajos.filter((a) => a.modulo === 'compras').forEach((a) => { %>
+                <a class="chip" href="<%= a.href %>">"<%= a.etiqueta %>"</a>
               <% }) %>
             </div>
           </div>
@@ -46,7 +52,7 @@
   <%- include('inspector', { cambioPendiente }) %>
 </div>
 <script>
-  document.querySelectorAll('.chip').forEach(function (btn) {
+  document.querySelectorAll('.chip[data-comando]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       document.dispatchEvent(new CustomEvent('chat-enviar-comando', { detail: btn.dataset.comando }));
     });

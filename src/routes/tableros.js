@@ -26,10 +26,19 @@ function sugerenciasHero() {
     .map((s) => ({ ...s, comando: `sugerir tablero de ${s.modulo} con ${s.conceptos.join(',')}` }));
 }
 
+// A diferencia de las sugerencias de arriba (que proponen un tablero nuevo
+// vía el chat), estos dos atajos van directo al tablero general de Ventas/
+// Compras ya armado (tableros/ventas.yaml, tableros/compras.yaml) — un link
+// normal, sin pasar por la capa semántica ni por el chat.
+const ATAJOS_HERO = [
+  { modulo: 'ventas', etiqueta: 'Armar Tablero General de Ventas', href: '/tableros/ventas' },
+  { modulo: 'compras', etiqueta: 'Armar Tablero General de Compras', href: '/tableros/compras' },
+];
+
 router.get('/tableros', requireAuth, async (req, res) => {
   try {
     const topbar = await datosTopbar(req.session.usuario, null);
-    res.render('tableros-inicio', { ...topbar, sugerencias: sugerenciasHero() });
+    res.render('tableros-inicio', { ...topbar, sugerencias: sugerenciasHero(), atajos: ATAJOS_HERO });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al cargar tableros: ${err.message || err}` });
   }

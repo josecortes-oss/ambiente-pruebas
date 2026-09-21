@@ -119,6 +119,10 @@ describe('app (integración de rutas)', () => {
     assert.match(html, /Escribe en el Chat lo que necesitas para construir los Tableros/);
     assert.match(html, /Ventas por cliente/);
     assert.match(html, /Compras por proveedor/);
+    assert.match(html, /Armar Tablero General de Ventas/);
+    assert.match(html, /Armar Tablero General de Compras/);
+    assert.match(html, /<a class="chip" href="\/tableros\/ventas">/);
+    assert.match(html, /<a class="chip" href="\/tableros\/compras">/);
 
     const workspace = await fetch(`${baseUrl}/tableros/ventas`, { headers: { Cookie: cookie } });
     assert.equal(workspace.status, 200);
