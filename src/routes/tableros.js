@@ -7,6 +7,7 @@ const { obtenerDatosVentasMensuales } = require('../ventas-mensual');
 const { obtenerDatosCompras } = require('../compras-mensual');
 const { datosTopbar } = require('../topbar');
 const semantica = require('../semantica');
+const versiones = require('../versiones');
 
 const router = express.Router();
 
@@ -181,6 +182,23 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al ejecutar el tablero: ${err.message || err}` });
   }
+});
+
+// Versionador (panel "Historial" del inspector, views/inspector.ejs): estas
+// dos rutas solo leen/borran el historial guardado en tableros/.versiones/
+// <id>.yaml (src/versiones.js). Restaurar una versión sigue pasando por el
+// chat (POST /chat "restaurar version <n> de <id>") para reusar la misma
+// validación semántica y el mismo bloqueo de tableros especiales que ya
+// tiene ese comando, en vez de duplicar esa lógica acá.
+router.get('/tableros/:id/versiones', requireAuth, (req, res) => {
+  const id = req.params.id;
+  const lista = versiones.listarVersiones(id).map((v, i) => ({ numero: i + 1, fecha: v.fecha, descripcion: v.descripcion }));
+  res.json({ id, versiones: lista });
+});
+
+router.post('/tableros/:id/versiones/eliminar', requireAuth, (req, res) => {
+  versiones.eliminarVersiones(req.params.id);
+  res.json({ ok: true });
 });
 
 module.exports = router;

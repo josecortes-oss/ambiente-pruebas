@@ -199,6 +199,20 @@ a la base de datos.
     (o restaurado) se ve de inmediato. Los tableros especiales "ventas" y
     "compras" no se pueden editar ni restaurar por chat (mismo bloqueo que
     el resto de comandos de edición), así que nunca acumulan versiones.
+
+    Además de los comandos de chat, el historial es visible sin escribir
+    nada: el botón **🕘 Historial** del topbar (mismo que abre el panel del
+    punto 9) ahora lista, bajo "Versiones guardadas", cada versión del
+    tablero que se está viendo (de la más nueva a la más vieja) con un
+    botón **↺ Restaurar** por versión y un botón **🗑 Eliminar todas**. Esa
+    lista sale de `GET /tableros/:id/versiones` (`src/routes/tableros.js`,
+    solo lee `versiones.listarVersiones`); "Restaurar" reusa el mismo
+    comando de chat (`POST /chat` con `restaurar version <n> de <id>`, para
+    no duplicar la validación semántica ni el bloqueo de tableros
+    especiales) y navega al tablero actualizado; "Eliminar todas" llama a
+    `POST /tableros/:id/versiones/eliminar`. Si no hay un tablero abierto
+    (p. ej. en el hero de `/tableros`) o el tablero todavía no tiene
+    versiones, el panel lo dice explícitamente en vez de mostrarse vacío.
 10. **Capa semántica** (`semantica/conceptos.yaml`, `src/semantica.js`): un
     diccionario de negocio → modelo/campo real de Odoo, para no tener que
     conocer nombres técnicos al pedir un tablero. Cada concepto tiene

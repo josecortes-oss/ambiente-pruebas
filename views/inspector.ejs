@@ -1,4 +1,4 @@
-<aside class="inspector" id="inspector" hidden>
+<aside class="inspector" id="inspector" data-activo-id="<%= activoId || '' %>" hidden>
   <div class="inspector-inner">
     <div class="inspector-head"><h2 id="inspector-titulo">Componente</h2><button class="close-button" id="cerrar-inspector" type="button">✕</button></div>
     <div class="inspector-body">
@@ -9,8 +9,15 @@
         <% } else { %>
           <div class="version-item actual"><div class="version-top">Estado actual<span>Sin cambios</span></div><p>No hay cambios del chat pendientes de deshacer.</p></div>
         <% } %>
-        <div class="prop-group"><h3>Cómo funciona</h3></div>
-        <p style="color:var(--muted);font-size:11px;line-height:1.5">Cada vez que el chat crea, edita o elimina un tablero, la app guarda una copia de la versión anterior antes de escribir. "Deshacer" (arriba) restaura esa única copia — no es un historial multi-versión.</p>
+
+        <div class="prop-group historial-head">
+          <h3>Versiones guardadas</h3>
+          <button class="icon-button" id="btn-eliminar-versiones" type="button" hidden>🗑 Eliminar todas</button>
+        </div>
+        <div id="lista-versiones">
+          <p style="color:var(--muted);font-size:11px">Abre un tablero para ver su historial de versiones.</p>
+        </div>
+        <p style="color:var(--muted);font-size:10.5px;line-height:1.5;margin-top:10px">Cada vez que el chat guarda un cambio válido en este tablero (crear, agregar/quitar campo, agregar gráfico, restaurar) se agrega una versión nueva acá. "Restaurar" deja esa versión como la actual y además queda registrada como una versión más — el historial nunca se reescribe.</p>
       </div>
     </div>
   </div>
@@ -23,6 +30,77 @@
     var inspectorTitulo = document.getElementById('inspector-titulo');
     var panelComponente = document.getElementById('panel-componente');
     var panelHistorial = document.getElementById('panel-historial');
+    var listaVersiones = document.getElementById('lista-versiones');
+    var btnEliminarVersiones = document.getElementById('btn-eliminar-versiones');
+    var activoId = inspector.dataset.activoId || null;
+
+    function formatearFecha(iso) {
+      try { return new Date(iso).toLocaleString('es-CL'); } catch (e) { return iso; }
+    }
+
+    function renderVersiones(lista) {
+      if (!activoId) {
+        listaVersiones.innerHTML = '<p style="color:var(--muted);font-size:11px">Abre un tablero para ver su historial de versiones.</p>';
+        btnEliminarVersiones.hidden = true;
+        return;
+      }
+      if (!lista.length) {
+        listaVersiones.innerHTML = '<p style="color:var(--muted);font-size:11px">"' + activoId + '" todavía no tiene versiones guardadas. Se crea una cada vez que el chat guarda un cambio en el tablero.</p>';
+        btnEliminarVersiones.hidden = true;
+        return;
+      }
+      btnEliminarVersiones.hidden = false;
+      listaVersiones.innerHTML = lista.slice().reverse().map(function (v) {
+        return '<div class="version-item">' +
+          '<div class="version-top">Versión ' + v.numero + '<span>' + formatearFecha(v.fecha) + '</span></div>' +
+          '<p>' + v.descripcion + '</p>' +
+          '<div class="version-actions"><button type="button" class="icon-button btn-restaurar-version" data-numero="' + v.numero + '">↺ Restaurar</button></div>' +
+          '</div>';
+      }).join('');
+
+      listaVersiones.querySelectorAll('.btn-restaurar-version').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var n = btn.dataset.numero;
+          if (!confirm('¿Restaurar la versión ' + n + ' de "' + activoId + '"? Esto reemplaza el tablero actual (y queda registrado como una versión nueva).')) return;
+          btn.disabled = true;
+          fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mensaje: 'restaurar version ' + n + ' de ' + activoId }),
+          })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (data.tableroModificado) {
+                window.location.href = '/tableros/' + data.tableroModificado;
+              } else {
+                alert((data && (data.respuesta || data.error)) || 'No se pudo restaurar la versión.');
+                btn.disabled = false;
+              }
+            })
+            .catch(function (err) { alert('Error de conexión: ' + err.message); btn.disabled = false; });
+        });
+      });
+    }
+
+    function cargarVersiones() {
+      if (!activoId) { renderVersiones([]); return; }
+      listaVersiones.innerHTML = '<p style="color:var(--muted);font-size:11px">Cargando…</p>';
+      fetch('/tableros/' + activoId + '/versiones')
+        .then(function (r) { return r.json(); })
+        .then(function (data) { renderVersiones(data.versiones || []); })
+        .catch(function () { listaVersiones.innerHTML = '<p style="color:var(--muted);font-size:11px">No se pudo cargar el historial de versiones.</p>'; });
+    }
+
+    if (btnEliminarVersiones) {
+      btnEliminarVersiones.addEventListener('click', function () {
+        if (!activoId) return;
+        if (!confirm('¿Eliminar todas las versiones guardadas de "' + activoId + '"? El tablero actual no cambia; el próximo cambio guardado vuelve a empezar en la versión 1.')) return;
+        fetch('/tableros/' + activoId + '/versiones/eliminar', { method: 'POST' })
+          .then(function (r) { return r.json(); })
+          .then(function () { cargarVersiones(); })
+          .catch(function (err) { alert('Error de conexión: ' + err.message); });
+      });
+    }
 
     function abrirComponente(el) {
       document.querySelectorAll('.card.selectable').forEach(function (c) { c.classList.toggle('seleccionado', c === el); });
@@ -50,6 +128,7 @@
       panelHistorial.hidden = false;
       shell.classList.add('inspector-abierto');
       inspector.hidden = false;
+      cargarVersiones();
     }
 
     function cerrar() {

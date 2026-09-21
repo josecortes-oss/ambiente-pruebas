@@ -1,7 +1,10 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
 const odooClient = require('../src/odoo-client');
 const { crearApp } = require('../src/app');
+const versiones = require('../src/versiones');
 
 const CAMPOS_REALES = {
   'sale.order': ['name', 'partner_id', 'user_id', 'company_id', 'date_order', 'amount_total', 'state'],
@@ -129,6 +132,9 @@ describe('app (integración de rutas)', () => {
     const workspaceHtml = await workspace.text();
     assert.match(workspaceHtml, /Tablero: Ventas/);
     assert.match(workspaceHtml, /Vendedor Test/);
+    // el panel de historial (inspector) sabe qué tablero está activo para poder pedir sus versiones
+    assert.match(workspaceHtml, /data-activo-id="ventas"/);
+    assert.match(workspaceHtml, /Versiones guardadas/);
   });
 
   test('el workspace de Compras muestra filtros, KPIs y el gráfico por proveedor', async (t) => {
@@ -203,5 +209,60 @@ describe('app (integración de rutas)', () => {
     assert.match(html, /Capa semántica/);
     assert.match(html, /ventas_totales/);
     assert.match(html, /🧩 Conceptos/); // el link del topbar también debe verse para un admin
+  });
+
+  describe('versionador (rutas JSON del panel Historial)', () => {
+    const ID_V = 'test_tmp_app_versiones';
+    const ARCHIVO_V = path.join(__dirname, '..', 'tableros', `${ID_V}.yaml`);
+    function limpiarV() {
+      if (fs.existsSync(ARCHIVO_V)) fs.unlinkSync(ARCHIVO_V);
+      versiones.eliminarVersiones(ID_V);
+    }
+    after(limpiarV);
+
+    test('GET /tableros/:id/versiones sin sesión redirige a /login', async () => {
+      const r = await fetch(`${baseUrl}/tableros/${ID_V}/versiones`, { redirect: 'manual' });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), '/login');
+    });
+
+    test('lista versiones creadas por chat, y "eliminar" borra el historial sin tocar el tablero', async (t) => {
+      limpiarV();
+      t.mock.method(odooClient, 'authenticate', async () => 2);
+      t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'email']));
+
+      const login = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'login=admin&password=lo-que-sea',
+      });
+      const cookie = cookieDe(login);
+
+      const vacio = await fetch(`${baseUrl}/tableros/${ID_V}/versiones`, { headers: { Cookie: cookie } });
+      assert.deepEqual((await vacio.json()).versiones, []);
+
+      await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: `crear tablero ${ID_V}: modelo res.partner, campos name` }),
+      });
+
+      const conUna = await fetch(`${baseUrl}/tableros/${ID_V}/versiones`, { headers: { Cookie: cookie } });
+      const dataUna = await conUna.json();
+      assert.equal(dataUna.versiones.length, 1);
+      assert.equal(dataUna.versiones[0].numero, 1);
+      assert.match(dataUna.versiones[0].descripcion, /Editado por chat/);
+
+      const eliminado = await fetch(`${baseUrl}/tableros/${ID_V}/versiones/eliminar`, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+      });
+      assert.equal((await eliminado.json()).ok, true);
+      assert.ok(fs.existsSync(ARCHIVO_V), 'el tablero actual no debería borrarse al eliminar el historial');
+
+      const despues = await fetch(`${baseUrl}/tableros/${ID_V}/versiones`, { headers: { Cookie: cookie } });
+      assert.deepEqual((await despues.json()).versiones, []);
+    });
   });
 });
