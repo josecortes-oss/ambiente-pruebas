@@ -24,13 +24,13 @@
             <h3>Ventas</h3>
             <div class="chips-fila">
               <% sugerencias.filter((s) => s.modulo === 'ventas').forEach((s) => { %>
-                <button type="button" class="chip" data-comando="<%= s.comando %>"><%= s.etiqueta %></button>
+                <button type="button" class="chip" data-comando="<%= s.comando %>">"<%= s.etiqueta %>"</button>
               <% }) %>
             </div>
             <h3>Compras</h3>
             <div class="chips-fila">
               <% sugerencias.filter((s) => s.modulo === 'compras').forEach((s) => { %>
-                <button type="button" class="chip" data-comando="<%= s.comando %>"><%= s.etiqueta %></button>
+                <button type="button" class="chip" data-comando="<%= s.comando %>">"<%= s.etiqueta %>"</button>
               <% }) %>
             </div>
           </div>
