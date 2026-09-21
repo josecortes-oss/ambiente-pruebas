@@ -255,3 +255,86 @@ describe('responderChat — comandos de CRM, Financiero, Inventario y Producció
     assert.match((await responderChat('top productos producidos')).respuesta, /Producto A: 13/);
   });
 });
+
+describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
+  const ID_SEMANTICA = 'test_tmp_semantica';
+  const ARCHIVO_SEMANTICA = path.join(TABLEROS_DIR, `${ID_SEMANTICA}.yaml`);
+  after(() => { if (fs.existsSync(ARCHIVO_SEMANTICA)) fs.unlinkSync(ARCHIVO_SEMANTICA); });
+
+  test('"conceptos" lista todos los módulos y "conceptos de <modulo>" filtra uno (no toca Odoo)', async () => {
+    const todos = await responderChat('conceptos');
+    assert.match(todos.respuesta, /CRM:/);
+    assert.match(todos.respuesta, /Ventas:/);
+    const soloVentas = await responderChat('conceptos de ventas');
+    assert.match(soloVentas.respuesta, /ventas_totales/);
+    assert.doesNotMatch(soloVentas.respuesta, /valor_esperado/);
+  });
+
+  test('"conceptos de <modulo>" con un módulo inexistente sugiere los módulos válidos', async () => {
+    const r = await responderChat('conceptos de logistica');
+    assert.match(r.respuesta, /No hay conceptos para el módulo "logistica"/);
+    assert.match(r.respuesta, /ventas/);
+  });
+
+  test('"validar conceptos" reporta ok cuando fields_get confirma todos los campos', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => {
+      const semantica = require('../src/semantica');
+      const resultado = {};
+      for (const c of semantica.cargarConceptos()) resultado[c.campo] = { string: c.campo, type: 'char' };
+      return resultado;
+    });
+    const r = await responderChat('validar conceptos');
+    assert.match(r.respuesta, /capa semántica es válida/);
+  });
+
+  test('"sugerir tablero de <modulo>" muestra una vista previa en YAML sin guardar nada', async () => {
+    const r = await responderChat('sugerir tablero de crm');
+    assert.match(r.respuesta, /Sugerencia para "crm"/);
+    assert.match(r.respuesta, /modelo: crm.lead/);
+    assert.match(r.respuesta, /Para crearlo: crear tablero <id> de crm/);
+    assert.equal(r.tableroModificado, null);
+    assert.equal(fs.existsSync(ARCHIVO_SEMANTICA), false);
+  });
+
+  test('"crear tablero <id> de <modulo> con <conceptos>" valida contra Odoo y guarda el YAML resultante', async (t) => {
+    // valor_esperado trae su propio dominio (type/active); validateDefinition
+    // también valida esos campos, no solo las columnas elegidas.
+    t.mock.method(odooClient, 'executeKw', async () => ({
+      partner_id: { string: 'Contact', type: 'many2one' },
+      expected_revenue: { string: 'Expected Revenue', type: 'monetary' },
+      type: { string: 'Type', type: 'selection' },
+      active: { string: 'Active', type: 'boolean' },
+    }));
+    const r = await responderChat(`crear tablero ${ID_SEMANTICA} de crm con cliente_crm,valor_esperado`);
+    assert.match(r.respuesta, /creado a partir de la capa semántica/);
+    assert.equal(r.tableroModificado, ID_SEMANTICA);
+    assert.ok(fs.existsSync(ARCHIVO_SEMANTICA));
+    const contenido = fs.readFileSync(ARCHIVO_SEMANTICA, 'utf8');
+    assert.match(contenido, /modelo: crm\.lead/);
+    assert.match(contenido, /agrupar_por: partner_id/);
+    deshacerUltimoCambio();
+  });
+
+  test('"crear tablero <id> de <modulo>" sin "con" usa la sugerencia por defecto', async (t) => {
+    // cantidad_stock trae su propio dominio (location_id.usage='internal').
+    t.mock.method(odooClient, 'executeKw', async () => ({
+      product_id: { string: 'Product', type: 'many2one' },
+      quantity: { string: 'Quantity', type: 'float' },
+      location_id: { string: 'Location', type: 'many2one' },
+    }));
+    const r = await responderChat(`crear tablero ${ID_SEMANTICA} de inventario`);
+    assert.match(r.respuesta, /producto_stock, cantidad_stock/);
+    deshacerUltimoCambio();
+  });
+
+  test('mezclar conceptos de cabecera y línea (distintos modelos) se rechaza antes de tocar Odoo', async () => {
+    const r = await responderChat('crear tablero x de ventas con cliente,producto_vendido,ventas_totales');
+    assert.match(r.respuesta, /distintos modelos/);
+    assert.equal(r.tableroModificado, null);
+  });
+
+  test('el tablero "ventas" sigue protegido aunque se use la sintaxis de capa semántica', async () => {
+    const r = await responderChat('crear tablero ventas de ventas con cliente,ventas_totales');
+    assert.match(r.respuesta, /tipo especial/);
+  });
+});

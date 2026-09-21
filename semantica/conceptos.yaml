@@ -1,0 +1,250 @@
+# Capa semántica: vocabulario de negocio -> modelo/campo real de Odoo.
+#
+# Cada concepto describe UNA cosa que el negocio reconoce (un cliente, un
+# monto vendido, una etapa de oportunidad) y dónde vive de verdad en Odoo.
+# El chat (src/chat.js, comandos "conceptos"/"sugerir tablero"/"crear tablero
+# <id> de <modulo>") lee este archivo para sugerir y construir tableros sin
+# que el usuario tenga que conocer los nombres técnicos de Odoo.
+#
+# Se derivó de los tableros que ya existían (Ventas/Compras) y de los
+# comandos de consulta de src/consultas-modulos.js: son la base, no datos
+# inventados. `src/semantica.js` valida en runtime que cada modelo/campo
+# siga existiendo de verdad en Odoo (misma evaluación semántica que usan
+# los tableros).
+#
+# Campos de cada concepto:
+#   modulo      — ventas | compras | crm | financiero | inventario | produccion
+#   modelo      — modelo técnico de Odoo
+#   campo       — campo técnico de Odoo
+#   tipo        — "dimension" (para agrupar) | "medida" (para sumar/promediar)
+#   agregacion  — solo en medidas: suma | promedio
+#   etiqueta    — nombre para mostrar
+#   descripcion — de dónde sale y qué significa
+#   dominio     — (opcional) filtro base que aplica siempre que se use la medida
+
+# ---------- Ventas (sale.order / sale.order.line) ----------
+cliente:
+  modulo: ventas
+  modelo: sale.order
+  campo: partner_id
+  tipo: dimension
+  etiqueta: "Cliente"
+  descripcion: "Contacto (res.partner) asociado a la orden de venta."
+
+vendedor:
+  modulo: ventas
+  modelo: sale.order
+  campo: user_id
+  tipo: dimension
+  etiqueta: "Vendedor"
+  descripcion: "Usuario de Odoo responsable de la venta."
+
+estado_venta:
+  modulo: ventas
+  modelo: sale.order
+  campo: state
+  tipo: dimension
+  etiqueta: "Estado"
+  descripcion: "Estado de la orden de venta (draft, sent, sale, etc.)."
+
+fecha_venta:
+  modulo: ventas
+  modelo: sale.order
+  campo: date_order
+  tipo: dimension
+  etiqueta: "Fecha"
+  descripcion: "Fecha de la orden de venta."
+
+ventas_totales:
+  modulo: ventas
+  modelo: sale.order
+  campo: amount_total
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Ventas totales"
+  descripcion: "Suma de amount_total en sale.order."
+
+producto_vendido:
+  modulo: ventas
+  modelo: sale.order.line
+  campo: product_id
+  tipo: dimension
+  etiqueta: "Producto"
+  descripcion: "Producto de una línea de venta (sale.order.line)."
+
+monto_linea_venta:
+  modulo: ventas
+  modelo: sale.order.line
+  campo: price_subtotal
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Subtotal de línea"
+  descripcion: "Suma de price_subtotal en sale.order.line."
+
+# ---------- Compras (purchase.order / purchase.order.line) ----------
+proveedor:
+  modulo: compras
+  modelo: purchase.order
+  campo: partner_id
+  tipo: dimension
+  etiqueta: "Proveedor"
+  descripcion: "Contacto (res.partner) asociado a la orden de compra."
+
+estado_compra:
+  modulo: compras
+  modelo: purchase.order
+  campo: state
+  tipo: dimension
+  etiqueta: "Estado"
+  descripcion: "Estado de la orden de compra."
+
+fecha_compra:
+  modulo: compras
+  modelo: purchase.order
+  campo: date_order
+  tipo: dimension
+  etiqueta: "Fecha"
+  descripcion: "Fecha de la orden de compra."
+
+compras_totales:
+  modulo: compras
+  modelo: purchase.order
+  campo: amount_total
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Compras totales"
+  descripcion: "Suma de amount_total en purchase.order."
+
+producto_comprado:
+  modulo: compras
+  modelo: purchase.order.line
+  campo: product_id
+  tipo: dimension
+  etiqueta: "Producto"
+  descripcion: "Producto de una línea de compra (purchase.order.line)."
+
+monto_linea_compra:
+  modulo: compras
+  modelo: purchase.order.line
+  campo: price_subtotal
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Subtotal de línea"
+  descripcion: "Suma de price_subtotal en purchase.order.line."
+
+# ---------- CRM (crm.lead) ----------
+cliente_crm:
+  modulo: crm
+  modelo: crm.lead
+  campo: partner_id
+  tipo: dimension
+  etiqueta: "Contacto"
+  descripcion: "Contacto asociado a la oportunidad."
+
+vendedor_crm:
+  modulo: crm
+  modelo: crm.lead
+  campo: user_id
+  tipo: dimension
+  etiqueta: "Vendedor"
+  descripcion: "Usuario responsable de la oportunidad."
+
+etapa_oportunidad:
+  modulo: crm
+  modelo: crm.lead
+  campo: stage_id
+  tipo: dimension
+  etiqueta: "Etapa"
+  descripcion: "Etapa del pipeline (New, Qualified, Proposition, Won, ...)."
+
+valor_esperado:
+  modulo: crm
+  modelo: crm.lead
+  campo: expected_revenue
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Valor esperado"
+  descripcion: "Suma de expected_revenue en oportunidades abiertas."
+  dominio: [['type', '=', 'opportunity'], ['active', '=', true]]
+
+# ---------- Financiero (account.move) ----------
+cliente_facturacion:
+  modulo: financiero
+  modelo: account.move
+  campo: partner_id
+  tipo: dimension
+  etiqueta: "Cliente"
+  descripcion: "Contacto asociado a la factura/movimiento contable."
+
+estado_factura:
+  modulo: financiero
+  modelo: account.move
+  campo: state
+  tipo: dimension
+  etiqueta: "Estado"
+  descripcion: "Estado del movimiento contable (draft, posted, cancel)."
+
+monto_facturado:
+  modulo: financiero
+  modelo: account.move
+  campo: amount_total
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Monto facturado"
+  descripcion: "Suma de amount_total en account.move."
+  dominio: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted']]
+
+monto_adeudado:
+  modulo: financiero
+  modelo: account.move
+  campo: amount_residual
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Monto adeudado"
+  descripcion: "Suma de amount_residual (lo que falta cobrar) en account.move."
+  dominio: [['move_type', '=', 'out_invoice'], ['state', '=', 'posted']]
+
+# ---------- Inventario (stock.quant) ----------
+producto_stock:
+  modulo: inventario
+  modelo: stock.quant
+  campo: product_id
+  tipo: dimension
+  etiqueta: "Producto"
+  descripcion: "Producto con existencias en stock.quant."
+
+cantidad_stock:
+  modulo: inventario
+  modelo: stock.quant
+  campo: quantity
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Cantidad en stock"
+  descripcion: "Suma de quantity en stock.quant, ubicaciones internas."
+  dominio: [['location_id.usage', '=', 'internal']]
+
+# ---------- Producción (mrp.production) ----------
+producto_producido:
+  modulo: produccion
+  modelo: mrp.production
+  campo: product_id
+  tipo: dimension
+  etiqueta: "Producto"
+  descripcion: "Producto fabricado en la orden de producción."
+
+estado_produccion:
+  modulo: produccion
+  modelo: mrp.production
+  campo: state
+  tipo: dimension
+  etiqueta: "Estado"
+  descripcion: "Estado de la orden de producción (draft, confirmed, done, ...)."
+
+cantidad_producida:
+  modulo: produccion
+  modelo: mrp.production
+  campo: product_qty
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Cantidad producida"
+  descripcion: "Suma de product_qty en mrp.production."

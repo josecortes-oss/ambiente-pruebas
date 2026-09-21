@@ -6,6 +6,7 @@ const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
 const { obtenerDatosVentasMensuales } = require('./ventas-mensual');
 const { PERIODOS } = require('./agregaciones');
 const consultasModulos = require('./consultas-modulos');
+const semantica = require('./semantica');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
 
@@ -53,6 +54,19 @@ function formatearEntradas(grafico) {
   return grafico.entradas
     .map(([etiqueta, valor], i) => `${i + 1}. ${etiqueta}: ${valor.toLocaleString('es-CL', { maximumFractionDigits: 2 })}`)
     .join('\n');
+}
+
+function formatearConcepto(c) {
+  const tipo = c.tipo === 'medida' ? `medida, ${c.agregacion}` : 'dimensión';
+  return `- ${c.nombre} (${tipo}): ${c.etiqueta} — ${c.modelo}.${c.campo}`;
+}
+
+/** "con a, b, c" del usuario, o la sugerencia por defecto de la capa semántica si no se especificó nada. */
+function resolverListaConceptos(modulo, listaTexto) {
+  if (listaTexto) {
+    return listaTexto.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  }
+  return semantica.sugerirConceptosPorDefecto(modulo);
 }
 
 function cargarTablero(id) {
@@ -136,6 +150,13 @@ Producción:
 - resumen produccion
 - produccion por estado
 - top productos producidos
+
+Capa semántica (conceptos de negocio -> modelo/campo real, semantica/conceptos.yaml):
+- conceptos                                       (lista todos, agrupados por módulo)
+- conceptos de <modulo>                           (ventas | compras | crm | financiero | inventario | produccion)
+- validar conceptos                               (confirma contra Odoo que cada modelo/campo sigue existiendo)
+- sugerir tablero de <modulo>[ con <concepto1>,<concepto2>,...]   (propone un tablero, no lo guarda)
+- crear tablero <id> de <modulo>[ con <concepto1>,<concepto2>,...] (lo crea usando los conceptos; sin "con" usa la sugerencia por defecto)
 
 Edición de tableros genéricos:
 - crear tablero <id>: modelo <modelo>, campos <c1,c2,...>[, titulo <texto>]
@@ -287,6 +308,76 @@ const COMANDOS = [
   {
     patron: /^top productos producidos$/,
     accion: async () => formatearEntradas(await consultasModulos.obtenerTopProductosProducidos()),
+  },
+  // --- Capa semántica: el chat "lee" conceptos, "sugiere" y "crea" tableros ---
+  {
+    patron: /^conceptos$/,
+    accion: async () =>
+      semantica
+        .listarModulos()
+        .map((m) => `${semantica.ETIQUETA_MODULO[m] || m}:\n${semantica.conceptosDeModulo(m).map(formatearConcepto).join('\n')}`)
+        .join('\n\n'),
+  },
+  {
+    patron: /^conceptos de (\w+)$/,
+    accion: async ([, moduloBruto]) => {
+      const modulo = moduloBruto.toLowerCase();
+      const items = semantica.conceptosDeModulo(modulo);
+      if (!items.length) {
+        return `No hay conceptos para el módulo "${modulo}". Módulos disponibles: ${semantica.listarModulos().join(', ')}.`;
+      }
+      return `${semantica.ETIQUETA_MODULO[modulo] || modulo}:\n${items.map(formatearConcepto).join('\n')}`;
+    },
+  },
+  {
+    patron: /^validar conceptos$/,
+    accion: async () => {
+      const { valido, errores } = await semantica.validarConceptos();
+      return valido
+        ? 'La capa semántica es válida: todos los conceptos apuntan a modelos/campos que existen en Odoo.'
+        : `La capa semántica tiene errores:\n${errores.join('\n')}`;
+    },
+  },
+  {
+    patron: /^sugerir tablero de (\w+)(?: con ([\w, ]+))?$/,
+    accion: async ([, moduloBruto, listaTexto]) => {
+      const modulo = moduloBruto.toLowerCase();
+      if (!semantica.listarModulos().includes(modulo)) {
+        return `No conozco el módulo "${modulo}". Módulos disponibles: ${semantica.listarModulos().join(', ')}.`;
+      }
+      const nombresConceptos = resolverListaConceptos(modulo, listaTexto);
+      if (!nombresConceptos) {
+        return `El módulo "${modulo}" no tiene suficientes conceptos (necesita al menos una dimensión y una medida) ` +
+          `para sugerir un tablero automáticamente. Usa "conceptos de ${modulo}" para elegir manualmente.`;
+      }
+      const resultado = semantica.construirDefinicionDesdeConceptos('<id>', modulo, nombresConceptos);
+      if (resultado.error) return resultado.error;
+      return `Sugerencia para "${modulo}" (conceptos: ${nombresConceptos.join(', ')}):\n\n${yaml.dump(resultado.def)}\n` +
+        `Para crearlo: crear tablero <id> de ${modulo}${listaTexto ? ` con ${nombresConceptos.join(',')}` : ''}`;
+    },
+  },
+  {
+    patron: /^crear tablero ([\w-]+) de (\w+)(?: con ([\w, ]+))?$/,
+    accion: async ([, idBruto, moduloBruto, listaTexto], { tableroModificado }) => {
+      const id = idBruto.toLowerCase();
+      const modulo = moduloBruto.toLowerCase();
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'crear/reemplazar');
+      if (!semantica.listarModulos().includes(modulo)) {
+        return `No conozco el módulo "${modulo}". Módulos disponibles: ${semantica.listarModulos().join(', ')}.`;
+      }
+      const nombresConceptos = resolverListaConceptos(modulo, listaTexto);
+      if (!nombresConceptos) {
+        return `El módulo "${modulo}" no tiene suficientes conceptos para crear un tablero automáticamente. ` +
+          `Usa: crear tablero ${id} de ${modulo} con <concepto1>,<concepto2> (ver "conceptos de ${modulo}").`;
+      }
+      const resultado = semantica.construirDefinicionDesdeConceptos(id, modulo, nombresConceptos);
+      if (resultado.error) return resultado.error;
+      const guardado = await guardarSiValido(id, resultado.def);
+      if (guardado.ok) tableroModificado.id = id;
+      return guardado.ok
+        ? `Tablero "${id}" creado a partir de la capa semántica (${nombresConceptos.join(', ')}).`
+        : guardado.mensaje;
+    },
   },
   {
     patron: /^crear tablero ([\w-]+): modelo ([\w.]+), campos ([\w., ]+?)(?:, titulo (.+))?$/,

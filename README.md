@@ -157,6 +157,31 @@ a la base de datos.
    existía). El botón **Deshacer** del topbar restaura ese único respaldo —
    es un nivel, no un historial multi-versión — y el botón **Historial**
    muestra en el inspector cuál fue el último cambio pendiente de deshacer.
+10. **Capa semántica** (`semantica/conceptos.yaml`, `src/semantica.js`): un
+    diccionario de negocio → modelo/campo real de Odoo, para no tener que
+    conocer nombres técnicos al pedir un tablero. Cada concepto tiene
+    `modulo`, `modelo`, `campo`, `tipo` (`dimension` o `medida`, con
+    `agregacion` para medidas), `etiqueta`, `descripcion` y, opcionalmente,
+    un `dominio` base (ej. `valor_esperado` en CRM solo cuenta oportunidades
+    abiertas). Se derivó de lo que ya usaban Ventas/Compras y
+    `src/consultas-modulos.js` — no son campos inventados, y
+    `validarConceptos()` (comando `validar conceptos`) confirma contra Odoo,
+    vía `fields_get`, que cada modelo/campo sigue existiendo — misma lógica
+    que `validateDefinition`, pero para la capa semántica en sí.
+
+    El chat actúa como un agente simple sobre esta capa (determinista, sin
+    IA — ver punto 7): **lee** (`conceptos`, `conceptos de <modulo>`),
+    **sugiere** (`sugerir tablero de <modulo>[ con <conceptos>]`, muestra el
+    YAML propuesto sin guardar nada) y **crea** (`crear tablero <id> de
+    <modulo>[ con <conceptos>]`) tableros combinando conceptos. Sin `con`,
+    usa `sugerirConceptosPorDefecto` (hasta 2 dimensiones + 1 medida del
+    modelo con más conceptos en ese módulo, para no mezclar, por ejemplo,
+    conceptos de cabecera de venta con conceptos de línea de venta). El
+    tablero que resulta es un tablero genérico normal (mismo formato que
+    cualquier YAML de `tableros/`) y pasa por `guardarSiValido`/
+    `validateDefinition` igual que `crear tablero <id>: modelo ...` — la
+    capa semántica solo evita escribir modelo/campo a mano, no se salta
+    ninguna validación.
 
 ### Agregar un nuevo tablero
 
@@ -209,6 +234,11 @@ quedar completamente aislados de la red.
   abiertas, solo facturas de venta publicadas y no pagadas, `stock.quant`
   siempre restringido a ubicaciones internas, producción solo cuenta como
   "producido" lo que está en estado `done`) y el formato de lo que devuelven.
+- **`test/semantica.test.js`**: que cada concepto tenga la forma correcta
+  (medidas con `agregacion`), que `validarConceptos` detecte un campo que ya
+  no existe en Odoo, que `construirDefinicionDesdeConceptos` rechace mezclar
+  modelos/módulos o nombres inexistentes, y que la sugerencia por defecto de
+  cada módulo produzca siempre una definición válida.
 - **`test/chat.test.js`**: `responderChat` — comandos de consulta de Ventas/
   Compras (incluida la regresión del bug de normalización que rompía
   `sale.order` → `saleorder`) y de CRM/Financiero/Inventario/Producción
@@ -216,9 +246,13 @@ quedar completamente aislados de la red.
   que la función exista), el ciclo completo de edición: crear/agregar/quitar
   campo, la protección de los tableros "ventas" y "compras", y que
   `deshacerUltimoCambio` de verdad borre un tablero recién creado y restaure
-  el YAML anterior en una edición. Escribe archivos reales bajo `tableros/`
-  con un id de prueba (`test_tmp_chat`) y los limpia siempre en un hook
-  `after`.
+  el YAML anterior en una edición, y los comandos de la capa semántica
+  (`conceptos`, `sugerir tablero de <modulo>`, `crear tablero <id> de
+  <modulo>[ con <conceptos>]`) — incluido que mezclar conceptos de cabecera
+  y de línea se rechace antes de tocar Odoo, y que "ventas"/"compras" sigan
+  protegidos aunque se use esta sintaxis nueva. Escribe archivos reales bajo
+  `tableros/` con ids de prueba (`test_tmp_chat`, `test_tmp_semantica`) y los
+  limpia siempre en un hook `after`.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
   rutas protegidas, login inválido/válido, y que `/tableros` redirige al
