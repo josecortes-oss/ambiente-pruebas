@@ -67,6 +67,39 @@ function resolverConcepto(nombre) {
   return cargarConceptos().find((c) => c.nombre === nombre) || null;
 }
 
+/** Distancia de edición (Levenshtein) entre dos strings, para sugerir el
+ * concepto correcto cuando el chat recibe un nombre que no existe. */
+function distanciaEdicion(a, b) {
+  const filas = a.length + 1;
+  const columnas = b.length + 1;
+  const dist = Array.from({ length: filas }, (_, i) => [i, ...Array(columnas - 1).fill(0)]);
+  for (let j = 0; j < columnas; j++) dist[0][j] = j;
+  for (let i = 1; i < filas; i++) {
+    for (let j = 1; j < columnas; j++) {
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      dist[i][j] = Math.min(dist[i - 1][j] + 1, dist[i][j - 1] + 1, dist[i - 1][j - 1] + costo);
+    }
+  }
+  return dist[filas - 1][columnas - 1];
+}
+
+/** Sugiere el concepto más parecido (dentro del módulo, si se indica) a un
+ * nombre que el chat no reconoció, para que el agente pueda responder
+ * "¿quisiste decir...?" en vez de solo rechazar la solicitud. */
+function sugerirConceptoParecido(nombre, modulo) {
+  const candidatos = modulo ? conceptosDeModulo(modulo) : cargarConceptos();
+  let mejor = null;
+  let mejorDistancia = Infinity;
+  for (const c of candidatos) {
+    const d = distanciaEdicion(nombre, c.nombre);
+    if (d < mejorDistancia) {
+      mejorDistancia = d;
+      mejor = c.nombre;
+    }
+  }
+  return mejorDistancia <= 3 ? mejor : null;
+}
+
 /**
  * Evaluación semántica de la propia capa semántica: confirma contra Odoo
  * (fields_get, agrupado por modelo para no repetir llamadas) que cada
@@ -174,7 +207,11 @@ function construirDefinicionDesdeConceptos(id, modulo, nombresConceptos) {
   const conceptos = nombresConceptos.map((n) => resolverConcepto(n)).filter(Boolean);
   const faltantes = nombresConceptos.filter((n) => !resolverConcepto(n));
   if (faltantes.length) {
-    return { error: `No existen los conceptos: ${faltantes.join(', ')}. Usa "conceptos de ${modulo}" para ver los disponibles.` };
+    const pistas = faltantes.map((n) => {
+      const parecido = sugerirConceptoParecido(n, modulo);
+      return parecido ? `"${n}" no existe — ¿quisiste decir "${parecido}"?` : `"${n}" no existe`;
+    });
+    return { error: `${pistas.join('\n')}\nUsa "conceptos de ${modulo}" para ver los disponibles.` };
   }
   const fueraDeModulo = conceptos.filter((c) => c.modulo !== modulo);
   if (fueraDeModulo.length) {
@@ -240,6 +277,7 @@ module.exports = {
   listarModulos,
   conceptosDeModulo,
   resolverConcepto,
+  sugerirConceptoParecido,
   validarConceptos,
   validarConceptoIndividual,
   guardarConcepto,

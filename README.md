@@ -196,6 +196,17 @@ a la base de datos.
     capa semántica solo evita escribir modelo/campo a mano, no se salta
     ninguna validación.
 
+    Toda solicitud de "sugerir"/"crear tablero ... con <conceptos>" pasa
+    siempre por esta capa para interpretarse — nunca arma la definición del
+    tablero a mano fuera de `construirDefinicionDesdeConceptos`. Si el
+    usuario escribe mal un concepto (ej. "clientes" en vez de "cliente"),
+    `sugerirConceptoParecido` (distancia de edición/Levenshtein,
+    `src/semantica.js`) busca el nombre real más cercano dentro del mismo
+    módulo y el chat responde `"clientes" no existe — ¿quisiste decir
+    "cliente"?` en lugar de solo rechazar la solicitud — la forma en la que
+    el agente "sugiere mejoras" cuando no puede interpretar literalmente lo
+    pedido.
+
 11. **Administración de la capa semántica** (`/semantica`, `src/routes/
     semantica.js`, `views/semantica.ejs`): página para agregar, editar y
     eliminar conceptos sin tocar el YAML a mano. **Solo administradores**
@@ -277,13 +288,14 @@ quedar completamente aislados de la red.
 - **`test/semantica.test.js`**: que cada concepto tenga la forma correcta
   (medidas con `agregacion`), que `validarConceptos` detecte un campo que ya
   no existe en Odoo, que `construirDefinicionDesdeConceptos` rechace mezclar
-  modelos/módulos o nombres inexistentes, que la sugerencia por defecto de
-  cada módulo produzca siempre una definición válida, y (contra un archivo
-  temporal, nunca el real — ver punto 11 arriba) que `guardarConcepto`
-  rechace forma inválida o campos que no existen en Odoo sin escribir nada,
-  que el upsert funcione, que `eliminarConcepto` falle con un mensaje claro
-  sobre un concepto inexistente, y que el encabezado explicativo sobreviva a
-  un guardado.
+  modelos/módulos o nombres inexistentes (y que, para un nombre mal escrito,
+  `sugerirConceptoParecido` proponga el concepto real más cercano — "¿quisiste
+  decir...?"), que la sugerencia por defecto de cada módulo produzca siempre
+  una definición válida, y (contra un archivo temporal, nunca el real — ver
+  punto 11 arriba) que `guardarConcepto` rechace forma inválida o campos que
+  no existen en Odoo sin escribir nada, que el upsert funcione, que
+  `eliminarConcepto` falle con un mensaje claro sobre un concepto inexistente,
+  y que el encabezado explicativo sobreviva a un guardado.
 - **`test/chat.test.js`**: `responderChat` — comandos de consulta de Ventas/
   Compras (incluida la regresión del bug de normalización que rompía
   `sale.order` → `saleorder`) y de CRM/Financiero/Inventario/Producción

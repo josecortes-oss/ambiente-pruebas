@@ -33,6 +33,12 @@ describe('semantica — el diccionario en sí', () => {
     assert.equal(semantica.resolverConcepto('no-existe-este-concepto'), null);
   });
 
+  test('sugerirConceptoParecido encuentra el nombre correcto cerca de un typo, y null si está muy lejos', () => {
+    assert.equal(semantica.sugerirConceptoParecido('clientes', 'ventas'), 'cliente');
+    assert.equal(semantica.sugerirConceptoParecido('vendedorr', 'ventas'), 'vendedor');
+    assert.equal(semantica.sugerirConceptoParecido('algo_totalmente_distinto_y_largo', 'ventas'), null);
+  });
+
   test('cada módulo tiene al menos una dimensión y una medida (para poder sugerir un tablero)', () => {
     for (const m of semantica.listarModulos()) {
       const items = semantica.conceptosDeModulo(m);
@@ -101,8 +107,13 @@ describe('semantica — construirDefinicionDesdeConceptos', () => {
   });
 
   test('rechaza nombres de concepto inexistentes', () => {
-    const { error } = semantica.construirDefinicionDesdeConceptos('id', 'ventas', ['no_existe']);
-    assert.match(error, /No existen los conceptos: no_existe/);
+    const { error } = semantica.construirDefinicionDesdeConceptos('id', 'ventas', ['no_existe_zzz']);
+    assert.match(error, /"no_existe_zzz" no existe/);
+  });
+
+  test('sugiere el concepto más parecido cuando el nombre está mal escrito', () => {
+    const { error } = semantica.construirDefinicionDesdeConceptos('id', 'ventas', ['clientes', 'ventas_totales']);
+    assert.match(error, /"clientes" no existe — ¿quisiste decir "cliente"\?/);
   });
 
   test('exige al menos una dimensión y una medida', () => {
