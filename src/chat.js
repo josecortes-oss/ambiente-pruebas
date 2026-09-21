@@ -7,6 +7,7 @@ const { obtenerDatosVentasMensuales } = require('./ventas-mensual');
 const { PERIODOS } = require('./agregaciones');
 const consultasModulos = require('./consultas-modulos');
 const semantica = require('./semantica');
+const versiones = require('./versiones');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
 
@@ -104,7 +105,7 @@ function deshacerUltimoCambio() {
   return { ok: true, mensaje: `Se deshizo el último cambio en "${id_}".`, id: id_ };
 }
 
-async function guardarSiValido(id, def) {
+async function guardarSiValido(id, def, descripcionVersion) {
   const validacion = await validateDefinition(def);
   if (!validacion.valido) {
     return { ok: false, mensaje: `No se pudo guardar "${id}", falló la evaluación semántica:\n${validacion.errores.join('\n')}` };
@@ -114,7 +115,8 @@ async function guardarSiValido(id, def) {
   const { _id, ...definicionLimpia } = def;
   fs.writeFileSync(archivo, yaml.dump(definicionLimpia), 'utf8');
   registrarRespaldo(id, contenidoAnterior, `Editado por chat: "${id}"`);
-  return { ok: true };
+  const numeroVersion = versiones.guardarVersion(id, definicionLimpia, descripcionVersion || `Editado por chat: "${id}"`);
+  return { ok: true, numeroVersion };
 }
 
 const AYUDA = `Comandos disponibles:
@@ -164,7 +166,13 @@ Edición de tableros genéricos:
 - quitar campo <campo> de <id>
 - agregar grafico a <id>: agrupar por <campo> midiendo <campo>
 - eliminar tablero <id>
-(Los tableros "ventas" y "compras" son de tipo especial y no se pueden editar por chat.)`;
+(Los tableros "ventas" y "compras" son de tipo especial y no se pueden editar por chat.)
+
+Versionador (cada cambio guardado en un tablero queda como una versión nueva):
+- versiones de <id>                               (lista el historial, de la más vieja a la más nueva)
+- ver version <n> de <id>                         (muestra el YAML de esa versión, sin restaurarla)
+- restaurar version <n> de <id>                   (vuelve a dejar esa versión como el tablero actual)
+- eliminar versiones de <id>                      (borra todo el historial de <id> para empezar de nuevo)`;
 
 const COMANDOS = [
   {
@@ -375,7 +383,7 @@ const COMANDOS = [
       const guardado = await guardarSiValido(id, resultado.def);
       if (guardado.ok) tableroModificado.id = id;
       return guardado.ok
-        ? `Tablero "${id}" creado a partir de la capa semántica (${nombresConceptos.join(', ')}).`
+        ? `Tablero "${id}" creado a partir de la capa semántica (${nombresConceptos.join(', ')}). Versión ${guardado.numeroVersion} guardada.`
         : guardado.mensaje;
     },
   },
@@ -396,7 +404,7 @@ const COMANDOS = [
       };
       const resultado = await guardarSiValido(id, def);
       if (resultado.ok) tableroModificado.id = id;
-      return resultado.ok ? `Tablero "${id}" creado.` : resultado.mensaje;
+      return resultado.ok ? `Tablero "${id}" creado. Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
     },
   },
   {
@@ -414,7 +422,7 @@ const COMANDOS = [
       def.campos.push({ campo, etiqueta: campo });
       const resultado = await guardarSiValido(id, def);
       if (resultado.ok) tableroModificado.id = id;
-      return resultado.ok ? `Campo "${campo}" agregado a "${id}".` : resultado.mensaje;
+      return resultado.ok ? `Campo "${campo}" agregado a "${id}". Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
     },
   },
   {
@@ -431,7 +439,7 @@ const COMANDOS = [
       if (def.campos.length === 0) return `No se puede quitar "${campo}": el tablero necesita al menos un campo.`;
       const resultado = await guardarSiValido(id, def);
       if (resultado.ok) tableroModificado.id = id;
-      return resultado.ok ? `Campo "${campo}" quitado de "${id}".` : resultado.mensaje;
+      return resultado.ok ? `Campo "${campo}" quitado de "${id}". Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
     },
   },
   {
@@ -446,7 +454,7 @@ const COMANDOS = [
       def.grafico = { titulo: `${medir} por ${agruparPor}`, agrupar_por: agruparPor, medir };
       const resultado = await guardarSiValido(id, def);
       if (resultado.ok) tableroModificado.id = id;
-      return resultado.ok ? `Gráfico agregado a "${id}".` : resultado.mensaje;
+      return resultado.ok ? `Gráfico agregado a "${id}". Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
     },
   },
   {
@@ -461,6 +469,53 @@ const COMANDOS = [
       registrarRespaldo(id, contenidoAnterior, `Eliminado por chat: "${id}"`);
       tableroModificado.id = id;
       return `Tablero "${id}" eliminado.`;
+    },
+  },
+  // --- Versionador: cada guardarSiValido() de arriba ya deja una versión
+  // nueva en tableros/.versiones/<id>.yaml; estos comandos leen y recuperan
+  // ese historial. ---
+  {
+    patron: /^versiones(?: de)? ([\w-]+)$/,
+    accion: async ([, idBruto]) => {
+      const id = idBruto.toLowerCase();
+      const lista = versiones.listarVersiones(id);
+      if (!lista.length) return `"${id}" todavía no tiene versiones guardadas. Se crea una cada vez que el chat guarda un cambio en el tablero.`;
+      return `Versiones de "${id}" (de más antigua a más nueva):\n` +
+        lista.map((v, i) => `${i + 1}. ${new Date(v.fecha).toLocaleString('es-CL')} — ${v.descripcion}`).join('\n') +
+        `\n\nUsa "ver version <n> de ${id}" o "restaurar version <n> de ${id}".`;
+    },
+  },
+  {
+    patron: /^ver version (\d+) de ([\w-]+)$/,
+    accion: async ([, numeroTexto, idBruto]) => {
+      const id = idBruto.toLowerCase();
+      const numero = Number(numeroTexto);
+      const version = versiones.obtenerVersion(id, numero);
+      if (!version) return `No existe la versión ${numero} de "${id}". Usa "versiones de ${id}" para ver cuántas hay.`;
+      return `Versión ${numero} de "${id}" (${new Date(version.fecha).toLocaleString('es-CL')} — ${version.descripcion}):\n\n${yaml.dump(version.definicion)}`;
+    },
+  },
+  {
+    patron: /^restaurar version (\d+) de ([\w-]+)$/,
+    accion: async ([, numeroTexto, idBruto], { tableroModificado }) => {
+      const id = idBruto.toLowerCase();
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'restaurar');
+      const numero = Number(numeroTexto);
+      const version = versiones.obtenerVersion(id, numero);
+      if (!version) return `No existe la versión ${numero} de "${id}". Usa "versiones de ${id}" para ver cuántas hay.`;
+      const resultado = await guardarSiValido(id, version.definicion, `Restaurado a la versión ${numero}`);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok
+        ? `Tablero "${id}" restaurado a la versión ${numero} (esto quedó guardado como la versión ${resultado.numeroVersion}).`
+        : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^eliminar versiones(?: de)? ([\w-]+)$/,
+    accion: async ([, idBruto]) => {
+      const id = idBruto.toLowerCase();
+      versiones.eliminarVersiones(id);
+      return `Se eliminaron todas las versiones guardadas de "${id}". El tablero actual no cambió; el próximo cambio empieza el historial de nuevo desde la versión 1.`;
     },
   },
 ];

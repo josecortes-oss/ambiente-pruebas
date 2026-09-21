@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const odooClient = require('../src/odoo-client');
 const { responderChat, obtenerUltimoCambio, deshacerUltimoCambio } = require('../src/chat');
+const versiones = require('../src/versiones');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
 const ID_PRUEBA = 'test_tmp_chat';
@@ -51,6 +52,7 @@ async function mockDatosVentas(modelo, metodo, args, kwargs) {
 
 function limpiarArchivoPrueba() {
   if (fs.existsSync(ARCHIVO_PRUEBA)) fs.unlinkSync(ARCHIVO_PRUEBA);
+  versiones.eliminarVersiones(ID_PRUEBA);
 }
 
 after(limpiarArchivoPrueba);
@@ -259,7 +261,10 @@ describe('responderChat — comandos de CRM, Financiero, Inventario y Producció
 describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
   const ID_SEMANTICA = 'test_tmp_semantica';
   const ARCHIVO_SEMANTICA = path.join(TABLEROS_DIR, `${ID_SEMANTICA}.yaml`);
-  after(() => { if (fs.existsSync(ARCHIVO_SEMANTICA)) fs.unlinkSync(ARCHIVO_SEMANTICA); });
+  after(() => {
+    if (fs.existsSync(ARCHIVO_SEMANTICA)) fs.unlinkSync(ARCHIVO_SEMANTICA);
+    versiones.eliminarVersiones(ID_SEMANTICA);
+  });
 
   test('"conceptos" lista todos los módulos y "conceptos de <modulo>" filtra uno (no toca Odoo)', async () => {
     const todos = await responderChat('conceptos');
@@ -335,6 +340,102 @@ describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
 
   test('el tablero "ventas" sigue protegido aunque se use la sintaxis de capa semántica', async () => {
     const r = await responderChat('crear tablero ventas de ventas con cliente,ventas_totales');
+    assert.match(r.respuesta, /tipo especial/);
+  });
+});
+
+describe('responderChat — versionador de tableros', () => {
+  const ID_V = 'test_tmp_versiones';
+  const ARCHIVO_V = path.join(TABLEROS_DIR, `${ID_V}.yaml`);
+  function limpiarV() {
+    if (fs.existsSync(ARCHIVO_V)) fs.unlinkSync(ARCHIVO_V);
+    versiones.eliminarVersiones(ID_V);
+  }
+  after(limpiarV);
+
+  test('cada guardado exitoso agrega una versión nueva, consultable con "versiones de <id>"', async (t) => {
+    limpiarV();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'email', 'phone']));
+
+    const r1 = await responderChat(`crear tablero ${ID_V}: modelo res.partner, campos name`);
+    assert.match(r1.respuesta, /Versión 1 guardada/);
+
+    const r2 = await responderChat(`agregar campo email a ${ID_V}`);
+    assert.match(r2.respuesta, /Versión 2 guardada/);
+
+    const lista = await responderChat(`versiones de ${ID_V}`);
+    assert.match(lista.respuesta, /1\. .* Editado por chat/);
+    assert.match(lista.respuesta, /2\. .* Editado por chat/);
+  });
+
+  test('"ver version <n> de <id>" muestra el YAML de esa versión sin tocar el tablero actual', async (t) => {
+    limpiarV();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'email']));
+    await responderChat(`crear tablero ${ID_V}: modelo res.partner, campos name`);
+
+    const r = await responderChat(`ver version 1 de ${ID_V}`);
+    assert.match(r.respuesta, /Versión 1 de/);
+    assert.match(r.respuesta, /modelo: res\.partner/);
+    assert.equal(r.tableroModificado, null);
+
+    const contenidoActual = fs.readFileSync(ARCHIVO_V, 'utf8');
+    assert.match(contenidoActual, /name/);
+  });
+
+  test('"restaurar version <n> de <id>" vuelve a dejar esa versión como la actual y agrega una versión nueva', async (t) => {
+    limpiarV();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'email', 'phone']));
+
+    await responderChat(`crear tablero ${ID_V}: modelo res.partner, campos name`); // versión 1: solo "name"
+    await responderChat(`agregar campo email a ${ID_V}`); // versión 2: "name,email"
+
+    const restaurar = await responderChat(`restaurar version 1 de ${ID_V}`);
+    assert.match(restaurar.respuesta, /restaurado a la versión 1/);
+    assert.match(restaurar.respuesta, /versión 3/);
+    assert.equal(restaurar.tableroModificado, ID_V);
+
+    const contenido = fs.readFileSync(ARCHIVO_V, 'utf8');
+    assert.match(contenido, /name/);
+    assert.doesNotMatch(contenido, /email/);
+
+    assert.equal(versiones.listarVersiones(ID_V).length, 3);
+  });
+
+  test('"eliminar versiones de <id>" borra el historial pero no toca el tablero actual', async (t) => {
+    limpiarV();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'email']));
+    await responderChat(`crear tablero ${ID_V}: modelo res.partner, campos name`);
+    assert.equal(versiones.listarVersiones(ID_V).length, 1);
+
+    const r = await responderChat(`eliminar versiones de ${ID_V}`);
+    assert.match(r.respuesta, /eliminaron todas las versiones/);
+    assert.equal(versiones.listarVersiones(ID_V).length, 0);
+    assert.ok(fs.existsSync(ARCHIVO_V), 'el tablero actual no debería borrarse');
+
+    const siguiente = await responderChat(`agregar campo email a ${ID_V}`);
+    assert.match(siguiente.respuesta, /Versión 1 guardada/);
+  });
+
+  test('"versiones de <id>" en un tablero sin historial responde con un mensaje claro', async () => {
+    const r = await responderChat('versiones de no_existe_este_tablero_zzz');
+    assert.match(r.respuesta, /todavía no tiene versiones guardadas/);
+  });
+
+  test('"ver version" y "restaurar version" con número inexistente no rompen nada', async (t) => {
+    limpiarV();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name']));
+    await responderChat(`crear tablero ${ID_V}: modelo res.partner, campos name`);
+
+    const ver = await responderChat(`ver version 9 de ${ID_V}`);
+    assert.match(ver.respuesta, /No existe la versión 9/);
+
+    const restaurar = await responderChat(`restaurar version 9 de ${ID_V}`);
+    assert.match(restaurar.respuesta, /No existe la versión 9/);
+    assert.equal(restaurar.tableroModificado, null);
+  });
+
+  test('"restaurar version" está bloqueado para los tableros especiales', async () => {
+    const r = await responderChat('restaurar version 1 de ventas');
     assert.match(r.respuesta, /tipo especial/);
   });
 });

@@ -50,9 +50,10 @@
           if (data.error) { agregarMensaje('Error: ' + data.error, 'sistema'); return; }
           agregarMensaje(data.respuesta, 'asistente');
           if (data.tableroModificado) {
-            agregarMensaje('Tablero "' + data.tableroModificado + '" actualizado. Recarga la página para verlo. "Deshacer" ya está disponible arriba.', 'sistema');
+            agregarMensaje('Mostrando el tablero "' + data.tableroModificado + '" con el cambio aplicado...', 'sistema');
             var btnDeshacer = document.getElementById('btn-deshacer');
             if (btnDeshacer) btnDeshacer.disabled = false;
+            setTimeout(function () { window.location.href = '/tableros/' + data.tableroModificado; }, 900);
           }
         })
         .catch(function (err) { agregarMensaje('Error de conexión: ' + err.message, 'sistema'); })

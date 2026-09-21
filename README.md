@@ -174,8 +174,31 @@ a la base de datos.
    antes de que un comando de chat escriba o borre un archivo de tablero, se
    guarda en memoria el contenido anterior (o `null` si el tablero no
    existía). El botón **Deshacer** del topbar restaura ese único respaldo —
-   es un nivel, no un historial multi-versión — y el botón **Historial**
-   muestra en el inspector cuál fue el último cambio pendiente de deshacer.
+   es una red de seguridad de un nivel para el último cambio, no el
+   historial completo (para eso está el versionador del punto 9b) — y el
+   botón **Historial** muestra en el inspector cuál fue el último cambio
+   pendiente de deshacer.
+9b. **Versionador de tableros** (`src/versiones.js`, comandos en
+    `src/chat.js`): a diferencia del "Deshacer" (un solo nivel, en memoria),
+    esto es un historial completo y persistente. Cada vez que un comando de
+    chat guarda un cambio válido en un tablero genérico (crear, agregar/
+    quitar campo, agregar gráfico, restaurar), además de escribir
+    `tableros/<id>.yaml` se agrega una copia con fecha a
+    `tableros/.versiones/<id>.yaml` (no se comitea al repo — ver
+    `.gitignore` — es historial de uso, no código) y el chat confirma con
+    "Versión N guardada." Comandos: `versiones de <id>` (lista el
+    historial), `ver version <n> de <id>` (muestra el YAML de esa versión
+    sin tocar el tablero actual), `restaurar version <n> de <id>` (la deja
+    como el tablero actual — y ese propio restaurar queda guardado como una
+    versión nueva, el historial nunca se reescribe, solo crece hacia
+    adelante) y `eliminar versiones de <id>` (borra todo el historial de
+    ese tablero, sin tocar el tablero actual, para volver a versionar desde
+    cero). Cuando un comando deja `tableroModificado`, `views/chat-panel.ejs`
+    ya no pide recargar la página a mano: muestra el mensaje de confirmación
+    y a los ~900ms navega solo a `/tableros/<id>`, así el gráfico actualizado
+    (o restaurado) se ve de inmediato. Los tableros especiales "ventas" y
+    "compras" no se pueden editar ni restaurar por chat (mismo bloqueo que
+    el resto de comandos de edición), así que nunca acumulan versiones.
 10. **Capa semántica** (`semantica/conceptos.yaml`, `src/semantica.js`): un
     diccionario de negocio → modelo/campo real de Odoo, para no tener que
     conocer nombres técnicos al pedir un tablero. Cada concepto tiene
@@ -313,9 +336,22 @@ quedar completamente aislados de la red.
   (`conceptos`, `sugerir tablero de <modulo>`, `crear tablero <id> de
   <modulo>[ con <conceptos>]`) — incluido que mezclar conceptos de cabecera
   y de línea se rechace antes de tocar Odoo, y que "ventas"/"compras" sigan
-  protegidos aunque se use esta sintaxis nueva. Escribe archivos reales bajo
-  `tableros/` con ids de prueba (`test_tmp_chat`, `test_tmp_semantica`) y los
-  limpia siempre en un hook `after`.
+  protegidos aunque se use esta sintaxis nueva; y el versionador (`versiones
+  de <id>`, `ver version <n> de <id>`, `restaurar version <n> de <id>`,
+  `eliminar versiones de <id>`) — que cada guardado exitoso agregue una
+  versión nueva, que restaurar deje esa versión como la actual y además
+  sume una versión más al historial (nunca lo reescribe), que eliminar
+  versiones limpie el historial sin tocar el tablero actual y que el
+  contador vuelva a empezar en 1, y que los tableros especiales sigan
+  protegidos también contra `restaurar version`. Escribe archivos reales
+  bajo `tableros/` y `tableros/.versiones/` con ids de prueba
+  (`test_tmp_chat`, `test_tmp_semantica`, `test_tmp_versiones`) y los limpia
+  siempre en un hook `after`.
+- **`test/versiones.test.js`**: `src/versiones.js` en aislamiento —
+  `guardarVersion` devuelve el número 1-based correcto y agrega al final,
+  `obtenerVersion` devuelve `null` para números que no existen,
+  `eliminarVersiones` borra todo el historial (y no falla si nunca hubo
+  uno) y hace que la próxima versión guardada vuelva a ser la 1.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
   rutas protegidas, login inválido/válido, que `/tableros` muestre el hero
