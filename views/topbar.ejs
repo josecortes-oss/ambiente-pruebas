@@ -14,6 +14,9 @@
     <% } %>
     <button class="icon-button" id="btn-deshacer" type="button" <%= cambioPendiente ? '' : 'disabled' %> title="<%= cambioPendiente ? cambioPendiente.descripcion : 'Aún no hay cambios para deshacer' %>">↺ Deshacer</button>
     <button class="icon-button" id="btn-historial" type="button">🕘 Historial</button>
+    <% if (esAdmin) { %>
+      <a class="icon-button" href="/semantica">🧩 Conceptos</a>
+    <% } %>
     <a class="icon-button" href="/logout">Salir</a>
   </div>
 </header>

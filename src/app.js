@@ -4,6 +4,7 @@ const session = require('express-session');
 const { router: authRouter } = require('./routes/auth');
 const tablerosRouter = require('./routes/tableros');
 const chatRouter = require('./routes/chat');
+const semanticaRouter = require('./routes/semantica');
 
 function crearApp() {
   const app = express();
@@ -33,6 +34,7 @@ function crearApp() {
   app.use(authRouter);
   app.use(tablerosRouter);
   app.use(chatRouter);
+  app.use(semanticaRouter);
 
   return app;
 }

@@ -5,26 +5,9 @@ const odooClient = require('../odoo-client');
 const { PERIODOS } = require('../agregaciones');
 const { obtenerDatosVentasMensuales } = require('../ventas-mensual');
 const { obtenerDatosCompras } = require('../compras-mensual');
-const { obtenerUltimoCambio } = require('../chat');
+const { datosTopbar } = require('../topbar');
 
 const router = express.Router();
-
-async function esAdministrador(uid) {
-  try {
-    return await odooClient.executeKw('res.users', 'has_group', [uid, 'base.group_system']);
-  } catch {
-    return false;
-  }
-}
-
-/** Datos comunes que necesita el topbar en cualquier página del workspace. */
-async function datosTopbar(usuario, activoId) {
-  const definiciones = await loadValidatedDefinitions();
-  const esAdmin = await esAdministrador(usuario.uid);
-  const tabs = definiciones.filter((d) => d.valido);
-  const invalidos = esAdmin ? definiciones.filter((d) => !d.valido) : [];
-  return { tabs, activoId, esAdmin, invalidos, cambioPendiente: obtenerUltimoCambio() };
-}
 
 router.get('/tableros', requireAuth, async (req, res) => {
   try {

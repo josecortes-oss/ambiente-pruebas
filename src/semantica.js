@@ -3,7 +3,47 @@ const path = require('path');
 const yaml = require('js-yaml');
 const odooClient = require('./odoo-client');
 
-const ARCHIVO_CONCEPTOS = path.join(__dirname, '..', 'semantica', 'conceptos.yaml');
+const RUTA_POR_DEFECTO = path.join(__dirname, '..', 'semantica', 'conceptos.yaml');
+let archivoConceptos = RUTA_POR_DEFECTO;
+
+/** Solo para tests: redirige las lecturas/escrituras a un archivo temporal,
+ * para que correr el test suite nunca reescriba (y reformatee) el
+ * semantica/conceptos.yaml real del repositorio. Sin argumento, restaura
+ * la ruta real. */
+function _usarArchivoParaPruebas(ruta) {
+  archivoConceptos = ruta || RUTA_POR_DEFECTO;
+}
+
+// escribirArchivoBruto() reescribe el archivo completo (yaml.dump no sabe
+// preservar comentarios ni el formato original) cada vez que se guarda o
+// elimina un concepto desde /semantica; sin este encabezado fijo, el primer
+// guardado desde el admin borraría la documentación del formato.
+const ENCABEZADO = `# Capa semántica: vocabulario de negocio -> modelo/campo real de Odoo.
+#
+# Cada concepto describe UNA cosa que el negocio reconoce (un cliente, un
+# monto vendido, una etapa de oportunidad) y dónde vive de verdad en Odoo.
+# El chat (src/chat.js, comandos "conceptos"/"sugerir tablero"/"crear tablero
+# <id> de <modulo>") lee este archivo para sugerir y construir tableros sin
+# que el usuario tenga que conocer los nombres técnicos de Odoo.
+#
+# Administrable desde /semantica (solo administradores de Odoo); cada
+# guardado se valida contra Odoo (fields_get) antes de escribirse.
+#
+# Campos de cada concepto:
+#   modulo      - ventas | compras | crm | financiero | inventario | produccion
+#   modelo      - modelo técnico de Odoo
+#   campo       - campo técnico de Odoo
+#   tipo        - "dimension" (para agrupar) | "medida" (para sumar/promediar)
+#   agregacion  - solo en medidas: suma | promedio
+#   etiqueta    - nombre para mostrar
+#   descripcion - de dónde sale y qué significa
+#   dominio     - (opcional) filtro base que aplica siempre que se use la medida
+#
+# NOTA: este archivo se reescribe por completo desde /semantica; los
+# comentarios puestos a mano dentro del cuerpo (no este encabezado) no
+# sobreviven a un guardado desde ahí.
+
+`;
 
 const ETIQUETA_MODULO = {
   ventas: 'Ventas', compras: 'Compras', crm: 'CRM',
@@ -11,7 +51,7 @@ const ETIQUETA_MODULO = {
 };
 
 function cargarConceptos() {
-  const bruto = yaml.load(fs.readFileSync(ARCHIVO_CONCEPTOS, 'utf8')) || {};
+  const bruto = yaml.load(fs.readFileSync(archivoConceptos, 'utf8')) || {};
   return Object.entries(bruto).map(([nombre, def]) => ({ nombre, ...def }));
 }
 
@@ -57,6 +97,72 @@ async function validarConceptos() {
     }
   }
   return { valido: errores.length === 0, errores };
+}
+
+function leerArchivoBruto() {
+  return yaml.load(fs.readFileSync(archivoConceptos, 'utf8')) || {};
+}
+
+function escribirArchivoBruto(objeto) {
+  fs.writeFileSync(archivoConceptos, ENCABEZADO + yaml.dump(objeto), 'utf8');
+}
+
+/**
+ * Evaluación semántica de UN concepto suelto (para el formulario de
+ * administración): forma correcta + que modelo/campo (y los campos usados
+ * en su "dominio") existan de verdad en Odoo. Mismo criterio que
+ * validateDefinition usa para los tableros.
+ */
+async function validarConceptoIndividual(def) {
+  const errores = [];
+  if (!def.modulo) errores.push('Falta "modulo".');
+  if (!def.modelo) errores.push('Falta "modelo".');
+  if (!def.campo) errores.push('Falta "campo".');
+  if (!def.etiqueta) errores.push('Falta "etiqueta".');
+  if (def.tipo !== 'dimension' && def.tipo !== 'medida') errores.push('"tipo" debe ser "dimension" o "medida".');
+  if (def.tipo === 'medida' && !def.agregacion) errores.push('Las medidas necesitan "agregacion".');
+  if (def.dominio !== undefined && !Array.isArray(def.dominio)) errores.push('"dominio" debe ser una lista de [campo, operador, valor].');
+  if (errores.length > 0) return { valido: false, errores };
+
+  let fieldsGet;
+  try {
+    fieldsGet = await odooClient.executeKw(def.modelo, 'fields_get', [], { attributes: ['string', 'type'] });
+  } catch (err) {
+    return { valido: false, errores: [`El modelo "${def.modelo}" no existe o no es accesible: ${err.message || err}`] };
+  }
+  const camposModelo = new Set(Object.keys(fieldsGet));
+  if (!camposModelo.has(def.campo)) {
+    errores.push(`El campo "${def.campo}" no existe en el modelo "${def.modelo}".`);
+  }
+  for (const term of def.dominio || []) {
+    if (Array.isArray(term) && term.length === 3) {
+      const campoBase = String(term[0]).split('.')[0];
+      if (!camposModelo.has(campoBase)) {
+        errores.push(`El campo "${campoBase}" usado en "dominio" no existe en el modelo "${def.modelo}".`);
+      }
+    }
+  }
+  return { valido: errores.length === 0, errores };
+}
+
+/** Crea o actualiza (si `nombre` ya existe) un concepto, validado contra
+ * Odoo antes de escribir — nunca se guarda un concepto que el agente no
+ * podría usar de verdad. */
+async function guardarConcepto(nombre, def) {
+  const validacion = await validarConceptoIndividual(def);
+  if (!validacion.valido) return { ok: false, errores: validacion.errores };
+  const bruto = leerArchivoBruto();
+  bruto[nombre] = def;
+  escribirArchivoBruto(bruto);
+  return { ok: true };
+}
+
+function eliminarConcepto(nombre) {
+  const bruto = leerArchivoBruto();
+  if (!(nombre in bruto)) return { ok: false, mensaje: `No existe el concepto "${nombre}".` };
+  delete bruto[nombre];
+  escribirArchivoBruto(bruto);
+  return { ok: true };
 }
 
 /**
@@ -135,7 +241,11 @@ module.exports = {
   conceptosDeModulo,
   resolverConcepto,
   validarConceptos,
+  validarConceptoIndividual,
+  guardarConcepto,
+  eliminarConcepto,
   construirDefinicionDesdeConceptos,
   sugerirConceptosPorDefecto,
   ETIQUETA_MODULO,
+  _usarArchivoParaPruebas,
 };

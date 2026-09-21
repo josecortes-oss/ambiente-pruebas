@@ -1,5 +1,8 @@
-const { test, describe } = require('node:test');
+const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const odooClient = require('../src/odoo-client');
 const semantica = require('../src/semantica');
 
@@ -123,5 +126,99 @@ describe('semantica — sugerirConceptosPorDefecto', () => {
       const { error } = semantica.construirDefinicionDesdeConceptos('id', modulo, sugeridos);
       assert.equal(error, undefined, `sugerencia de "${modulo}" no es una definición válida: ${error}`);
     }
+  });
+});
+
+describe('semantica — administración (guardarConcepto / eliminarConcepto)', () => {
+  // Estas pruebas escriben de verdad (guardarConcepto/eliminarConcepto
+  // reescriben el archivo completo) — por eso corren contra una copia
+  // temporal, nunca contra semantica/conceptos.yaml del repositorio.
+  const ID_PRUEBA = 'test_tmp_concepto';
+  const archivoTemporal = path.join(os.tmpdir(), `conceptos-prueba-${process.pid}-${Date.now()}.yaml`);
+
+  before(() => {
+    fs.writeFileSync(archivoTemporal, 'placeholder:\n  modulo: x\n  modelo: x\n  campo: x\n  tipo: dimension\n  etiqueta: x\n');
+    semantica._usarArchivoParaPruebas(archivoTemporal);
+  });
+  after(() => {
+    semantica._usarArchivoParaPruebas(); // restaura la ruta real
+    fs.unlinkSync(archivoTemporal);
+  });
+
+  test('guardarConcepto rechaza (sin escribir) un concepto cuyo campo no existe en Odoo', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => ({ name: { string: 'Name', type: 'char' } }));
+    const resultado = await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'campo_falso', tipo: 'dimension', etiqueta: 'Prueba',
+    });
+    assert.equal(resultado.ok, false);
+    assert.match(resultado.errores.join('\n'), /"campo_falso" no existe/);
+    assert.equal(semantica.resolverConcepto(ID_PRUEBA), null);
+  });
+
+  test('guardarConcepto exige "agregacion" en medidas y rechaza "tipo" inválido, sin tocar Odoo', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => {
+      throw new Error('no debería llamarse: la validación de forma va antes que fields_get');
+    });
+    const sinAgregacion = await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'amount_total', tipo: 'medida', etiqueta: 'Prueba',
+    });
+    assert.match(sinAgregacion.errores.join('\n'), /medidas necesitan "agregacion"/);
+
+    const tipoInvalido = await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'amount_total', tipo: 'otra-cosa', etiqueta: 'Prueba',
+    });
+    assert.match(tipoInvalido.errores.join('\n'), /"tipo" debe ser "dimension" o "medida"/);
+  });
+
+  test('guardarConcepto valida también los campos usados en "dominio"', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => ({
+      amount_total: { string: 'Total', type: 'monetary' },
+      state: { string: 'State', type: 'selection' },
+    }));
+    const resultado = await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'amount_total', tipo: 'medida', agregacion: 'suma',
+      etiqueta: 'Prueba', dominio: [['campo_de_dominio_falso', '=', 1]],
+    });
+    assert.equal(resultado.ok, false);
+    assert.match(resultado.errores.join('\n'), /"campo_de_dominio_falso" usado en "dominio" no existe/);
+  });
+
+  test('guardarConcepto crea el concepto y resolverConcepto lo ve de inmediato (sin caché)', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => ({ amount_total: { string: 'Total', type: 'monetary' } }));
+    const resultado = await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'amount_total', tipo: 'medida', agregacion: 'suma', etiqueta: 'Prueba',
+    });
+    assert.equal(resultado.ok, true);
+    const guardado = semantica.resolverConcepto(ID_PRUEBA);
+    assert.ok(guardado);
+    assert.equal(guardado.etiqueta, 'Prueba');
+  });
+
+  test('guardarConcepto sobre un nombre existente lo actualiza (upsert)', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => ({ name: { string: 'Name', type: 'char' } }));
+    await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'name', tipo: 'dimension', etiqueta: 'Actualizado',
+    });
+    assert.equal(semantica.resolverConcepto(ID_PRUEBA).etiqueta, 'Actualizado');
+  });
+
+  test('guardar reescribe el archivo completo, pero conserva el encabezado explicativo', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => ({ name: { string: 'Name', type: 'char' } }));
+    await semantica.guardarConcepto(ID_PRUEBA, {
+      modulo: 'ventas', modelo: 'sale.order', campo: 'name', tipo: 'dimension', etiqueta: 'Prueba',
+    });
+    const contenido = fs.readFileSync(archivoTemporal, 'utf8');
+    assert.match(contenido, /^# Capa semántica/);
+    assert.match(contenido, /Campos de cada concepto/);
+  });
+
+  test('eliminarConcepto quita el concepto; eliminar uno inexistente devuelve un error claro', () => {
+    const ok = semantica.eliminarConcepto(ID_PRUEBA);
+    assert.equal(ok.ok, true);
+    assert.equal(semantica.resolverConcepto(ID_PRUEBA), null);
+
+    const falla = semantica.eliminarConcepto('no_existe_este_concepto');
+    assert.equal(falla.ok, false);
+    assert.match(falla.mensaje, /No existe el concepto/);
   });
 });

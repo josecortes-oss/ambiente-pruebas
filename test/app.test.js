@@ -149,4 +149,51 @@ describe('app (integración de rutas)', () => {
     assert.equal(r.status, 302);
     assert.equal(r.headers.get('location'), '/login');
   });
+
+  test('GET /semantica sin sesión redirige a /login', async () => {
+    const r = await fetch(`${baseUrl}/semantica`, { redirect: 'manual' });
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get('location'), '/login');
+  });
+
+  test('GET /semantica con sesión pero sin el grupo de administrador responde 403', async (t) => {
+    t.mock.method(odooClient, 'authenticate', async () => 5); // usuario no admin
+    t.mock.method(odooClient, 'executeKw', mockExecuteKw); // has_group -> false por defecto
+
+    const login = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'login=marc&password=lo-que-sea',
+    });
+    const cookie = cookieDe(login);
+
+    const r = await fetch(`${baseUrl}/semantica`, { headers: { Cookie: cookie } });
+    assert.equal(r.status, 403);
+    const html = await r.text();
+    assert.match(html, /solo para administradores/);
+  });
+
+  test('GET /semantica con perfil administrador lista los conceptos agrupados por módulo', async (t) => {
+    t.mock.method(odooClient, 'authenticate', async () => 2);
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args) => {
+      if (metodo === 'has_group') return true;
+      return mockExecuteKw(modelo, metodo, args);
+    });
+
+    const login = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'login=admin&password=lo-que-sea',
+    });
+    const cookie = cookieDe(login);
+
+    const r = await fetch(`${baseUrl}/semantica`, { headers: { Cookie: cookie } });
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    assert.match(html, /Capa semántica/);
+    assert.match(html, /ventas_totales/);
+    assert.match(html, /🧩 Conceptos/); // el link del topbar también debe verse para un admin
+  });
 });

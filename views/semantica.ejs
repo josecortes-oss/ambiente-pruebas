@@ -1,0 +1,82 @@
+<%- include('layout-head', { titulo: 'Capa semántica' }) %>
+<%- include('topbar', { tabs, activoId, esAdmin, invalidos, cambioPendiente }) %>
+<main>
+  <h2>Capa semántica — conceptos</h2>
+  <p class="subt">Solo administradores. Cada concepto se valida contra Odoo (<code>fields_get</code>) antes de guardarse; el chat los usa para "leer" (<code>conceptos</code>), "sugerir" (<code>sugerir tablero de &lt;modulo&gt;</code>) y "crear" (<code>crear tablero &lt;id&gt; de &lt;modulo&gt;</code>) tableros.</p>
+
+  <% if (mensaje) { %><p class="trust-note" style="margin-bottom:16px;">✓ <%= mensaje %></p><% } %>
+  <% if (error) { %><p class="error" style="margin:0 0 16px;max-width:none;"><%= error %></p><% } %>
+
+  <div class="card" style="padding:20px; margin-bottom:24px; max-width:640px;">
+    <h3 style="margin-top:0"><%= edicion ? `Editar "${edicion.nombre}"` : 'Nuevo concepto' %></h3>
+    <form method="POST" action="/semantica">
+      <% if (edicion) { %><input type="hidden" name="nombre_original" value="<%= edicion.nombre %>" /><% } %>
+
+      <label for="nombre">Nombre (identificador único: minúsculas, números, "_")</label>
+      <input type="text" id="nombre" name="nombre" value="<%= edicion ? edicion.nombre : '' %>" pattern="[a-z0-9_]+"
+        <%= edicion ? 'readonly style="background:#f0f0f0"' : 'required' %> />
+
+      <label for="modulo">Módulo</label>
+      <input type="text" id="modulo" name="modulo" list="lista-modulos" value="<%= edicion ? edicion.modulo : '' %>" required />
+      <datalist id="lista-modulos">
+        <% modulos.forEach((m) => { %><option value="<%= m %>"><% }) %>
+      </datalist>
+
+      <label for="modelo">Modelo Odoo (ej. sale.order)</label>
+      <input type="text" id="modelo" name="modelo" value="<%= edicion ? edicion.modelo : '' %>" required />
+
+      <label for="campo">Campo técnico (ej. partner_id)</label>
+      <input type="text" id="campo" name="campo" value="<%= edicion ? edicion.campo : '' %>" required />
+
+      <label for="tipo">Tipo</label>
+      <select id="tipo" name="tipo" required>
+        <option value="dimension" <%= edicion && edicion.tipo === 'dimension' ? 'selected' : '' %>>Dimensión (para agrupar)</option>
+        <option value="medida" <%= edicion && edicion.tipo === 'medida' ? 'selected' : '' %>>Medida (para sumar/promediar)</option>
+      </select>
+
+      <label for="agregacion">Agregación (solo medidas: suma, promedio)</label>
+      <input type="text" id="agregacion" name="agregacion" value="<%= edicion && edicion.agregacion ? edicion.agregacion : '' %>" />
+
+      <label for="etiqueta">Etiqueta (nombre para mostrar)</label>
+      <input type="text" id="etiqueta" name="etiqueta" value="<%= edicion ? edicion.etiqueta : '' %>" required />
+
+      <label for="descripcion">Descripción</label>
+      <input type="text" id="descripcion" name="descripcion" value="<%= edicion && edicion.descripcion ? edicion.descripcion : '' %>" />
+
+      <label for="dominio">Dominio base (opcional, JSON — ej. [["state","=","sale"]])</label>
+      <input type="text" id="dominio" name="dominio" value="<%= edicion && edicion.dominio ? JSON.stringify(edicion.dominio) : '' %>" />
+
+      <button type="submit">Guardar</button>
+      <% if (edicion) { %><a href="/semantica" style="margin-left:10px;">Cancelar</a><% } %>
+    </form>
+  </div>
+
+  <% modulos.forEach((mod) => { %>
+    <h3><%= etiquetaModulo[mod] || mod %></h3>
+    <div class="table-wrap" style="margin-bottom:20px;">
+      <table>
+        <thead><tr><th>Nombre</th><th>Tipo</th><th>Modelo.Campo</th><th>Etiqueta</th><th></th></tr></thead>
+        <tbody>
+          <% conceptosPorModulo[mod].forEach((c) => { %>
+            <tr>
+              <td><%= c.nombre %></td>
+              <td><%= c.tipo %><% if (c.tipo === 'medida') { %> (<%= c.agregacion %>)<% } %></td>
+              <td><%= c.modelo %>.<%= c.campo %></td>
+              <td><%= c.etiqueta %></td>
+              <td style="white-space:nowrap;">
+                <a href="/semantica?editar=<%= c.nombre %>">Editar</a>
+                &nbsp;
+                <form method="POST" action="/semantica/<%= c.nombre %>/eliminar" style="display:inline"
+                  onsubmit="return confirm('¿Eliminar el concepto &quot;<%= c.nombre %>&quot;?')">
+                  <button type="submit" style="background:#d9534f;padding:4px 10px;font-size:12px;">Eliminar</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% }) %>
+</main>
+</body>
+</html>

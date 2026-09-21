@@ -183,6 +183,33 @@ a la base de datos.
     capa semántica solo evita escribir modelo/campo a mano, no se salta
     ninguna validación.
 
+11. **Administración de la capa semántica** (`/semantica`, `src/routes/
+    semantica.js`, `views/semantica.ejs`): página para agregar, editar y
+    eliminar conceptos sin tocar el YAML a mano. **Solo administradores**
+    (grupo `base.group_system` de Odoo) — `requireAdmin` en
+    `src/routes/semantica.js` verifica sesión + `has_group` antes de dejar
+    pasar; sin ese grupo responde `403`. El link "🧩 Conceptos" del topbar
+    (`views/topbar.ejs`) también es condicional a `esAdmin`, igual que el
+    aviso de tableros inválidos.
+
+    Cada guardado corre `guardarConcepto` → `validarConceptoIndividual`, que
+    valida forma (campos obligatorios, `tipo` válido, medidas con
+    `agregacion`) y, contra Odoo (`fields_get`), que el modelo exista y que
+    tanto `campo` como los campos usados en `dominio` existan ahí — si algo
+    falla, no se escribe nada y se muestra el error en la misma página. La
+    edición no permite renombrar (el nombre es la clave primaria del
+    concepto); para eso hay que eliminar y crear uno nuevo.
+
+    `semantica/conceptos.yaml` completo se reescribe en cada guardado o
+    eliminación (`yaml.dump` no preserva comentarios ni formato original);
+    `src/semantica.js` antepone siempre el mismo encabezado explicativo del
+    formato para que esa documentación no se pierda, aunque los comentarios
+    puestos a mano dentro del cuerpo si se pierden. Por esta razón, la ruta
+    del archivo es configurable en runtime (`_usarArchivoParaPruebas`, solo
+    para tests): `test/semantica.test.js` la redirige a un archivo temporal
+    antes de ejercitar `guardarConcepto`/`eliminarConcepto`, para que correr
+    `npm test` nunca reescriba el `conceptos.yaml` real del repositorio.
+
 ### Agregar un nuevo tablero
 
 Basta con crear un archivo `.yaml` en `tableros/` con `modelo`, `campos` y,
@@ -237,8 +264,13 @@ quedar completamente aislados de la red.
 - **`test/semantica.test.js`**: que cada concepto tenga la forma correcta
   (medidas con `agregacion`), que `validarConceptos` detecte un campo que ya
   no existe en Odoo, que `construirDefinicionDesdeConceptos` rechace mezclar
-  modelos/módulos o nombres inexistentes, y que la sugerencia por defecto de
-  cada módulo produzca siempre una definición válida.
+  modelos/módulos o nombres inexistentes, que la sugerencia por defecto de
+  cada módulo produzca siempre una definición válida, y (contra un archivo
+  temporal, nunca el real — ver punto 11 arriba) que `guardarConcepto`
+  rechace forma inválida o campos que no existen en Odoo sin escribir nada,
+  que el upsert funcione, que `eliminarConcepto` falle con un mensaje claro
+  sobre un concepto inexistente, y que el encabezado explicativo sobreviva a
+  un guardado.
 - **`test/chat.test.js`**: `responderChat` — comandos de consulta de Ventas/
   Compras (incluida la regresión del bug de normalización que rompía
   `sale.order` → `saleorder`) y de CRM/Financiero/Inventario/Producción
@@ -255,9 +287,12 @@ quedar completamente aislados de la red.
   limpia siempre en un hook `after`.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
-  rutas protegidas, login inválido/válido, y que `/tableros` redirige al
+  rutas protegidas, login inválido/válido, que `/tableros` redirige al
   primer tablero válido con datos reales de la página renderizada (Ventas y
-  Compras).
+  Compras), y que `/semantica` respete el control de acceso: sin sesión
+  redirige a `/login`, con sesión pero sin `base.group_system` responde
+  `403`, y con perfil administrador lista los conceptos y muestra el link
+  del topbar.
 
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
 `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a
