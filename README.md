@@ -72,7 +72,8 @@ a la base de datos.
 
 5b. **Página de inicio** (`GET /tableros`, `views/tableros-inicio.ejs`): ya no
     redirige a un tablero — muestra, dentro del mismo canvas de siempre, un
-    hero "Escribe en el Chat lo que necesitas para construir los Tableros"
+    hero con el titular principal "Espacio Listo" y el subtítulo "Escribe
+    en el Chat lo que necesitas para construir los Tableros"
     con chips de las combinaciones dimensión+medida más usadas de Ventas y
     Compras (`SUGERENCIAS_HERO` en `src/routes/tableros.js`). Cada chip
     dispara un evento `chat-enviar-comando` (`document.dispatchEvent`) que
