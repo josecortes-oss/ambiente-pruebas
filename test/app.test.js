@@ -100,7 +100,7 @@ describe('app (integración de rutas)', () => {
     assert.ok(cookieDe(r), 'debería fijar una cookie de sesión');
   });
 
-  test('con sesión, /tableros redirige al primer tablero válido (Ventas)', async (t) => {
+  test('con sesión, /tableros muestra el hero "construir un tablero" con chips de Ventas/Compras', async (t) => {
     t.mock.method(odooClient, 'authenticate', async () => 2);
     t.mock.method(odooClient, 'executeKw', mockExecuteKw);
 
@@ -112,15 +112,18 @@ describe('app (integración de rutas)', () => {
     });
     const cookie = cookieDe(login);
 
-    const r = await fetch(`${baseUrl}/tableros`, { redirect: 'manual', headers: { Cookie: cookie } });
-    assert.equal(r.status, 302);
-    assert.equal(r.headers.get('location'), '/tableros/ventas');
+    const r = await fetch(`${baseUrl}/tableros`, { headers: { Cookie: cookie } });
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    assert.match(html, /Hablar lo que necesitas para construir el Tablero que necesitas/);
+    assert.match(html, /Ventas por cliente/);
+    assert.match(html, /Compras por proveedor/);
 
     const workspace = await fetch(`${baseUrl}/tableros/ventas`, { headers: { Cookie: cookie } });
     assert.equal(workspace.status, 200);
-    const html = await workspace.text();
-    assert.match(html, /Tablero: Ventas/);
-    assert.match(html, /Vendedor Test/);
+    const workspaceHtml = await workspace.text();
+    assert.match(workspaceHtml, /Tablero: Ventas/);
+    assert.match(workspaceHtml, /Vendedor Test/);
   });
 
   test('el workspace de Compras muestra filtros, KPIs y el gráfico por proveedor', async (t) => {

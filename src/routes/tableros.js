@@ -1,22 +1,35 @@
 const express = require('express');
 const { requireAuth } = require('./auth');
-const { loadValidatedDefinitions, getValidatedDefinition } = require('../tableros');
+const { getValidatedDefinition } = require('../tableros');
 const odooClient = require('../odoo-client');
 const { PERIODOS } = require('../agregaciones');
 const { obtenerDatosVentasMensuales } = require('../ventas-mensual');
 const { obtenerDatosCompras } = require('../compras-mensual');
 const { datosTopbar } = require('../topbar');
+const semantica = require('../semantica');
 
 const router = express.Router();
 
+// Sugerencias de la pantalla "construir un tablero": las combinaciones más
+// usuales de dimensión + medida en Ventas/Compras. Se filtran contra la
+// capa semántica real por si alguno de estos conceptos se renombra o se
+// borra desde /semantica, para que el hero nunca muestre un chip roto.
+const SUGERENCIAS_HERO = [
+  { modulo: 'ventas', conceptos: ['cliente', 'ventas_totales'], etiqueta: 'Ventas por cliente' },
+  { modulo: 'ventas', conceptos: ['vendedor', 'ventas_totales'], etiqueta: 'Ventas por vendedor' },
+  { modulo: 'compras', conceptos: ['proveedor', 'compras_totales'], etiqueta: 'Compras por proveedor' },
+  { modulo: 'compras', conceptos: ['estado_compra', 'compras_totales'], etiqueta: 'Compras por estado' },
+];
+
+function sugerenciasHero() {
+  return SUGERENCIAS_HERO.filter((s) => s.conceptos.every((n) => semantica.resolverConcepto(n)))
+    .map((s) => ({ ...s, comando: `sugerir tablero de ${s.modulo} con ${s.conceptos.join(',')}` }));
+}
+
 router.get('/tableros', requireAuth, async (req, res) => {
   try {
-    const definiciones = await loadValidatedDefinitions();
-    const primero = definiciones.find((d) => d.valido);
-    if (!primero) {
-      return res.status(500).render('error', { mensaje: 'No hay tableros válidos configurados.' });
-    }
-    res.redirect(`/tableros/${primero._id}`);
+    const topbar = await datosTopbar(req.session.usuario, null);
+    res.render('tableros-inicio', { ...topbar, sugerencias: sugerenciasHero() });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al cargar tableros: ${err.message || err}` });
   }

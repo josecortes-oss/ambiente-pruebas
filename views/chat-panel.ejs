@@ -66,5 +66,9 @@
       enviar(mensaje);
     });
     quickPrompt.addEventListener('click', function () { enviar(quickPrompt.textContent); });
+
+    // Los chips de sugerencias del hero ("construir un tablero") envían por
+    // este evento en vez de acoplarse directamente al chat.
+    document.addEventListener('chat-enviar-comando', function (e) { enviar(e.detail); });
   })();
 </script>

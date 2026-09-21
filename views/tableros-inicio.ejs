@@ -1,0 +1,55 @@
+<%- include('layout-head', { titulo: 'Tableros' }) %>
+<%- include('topbar', { tabs, activoId, esAdmin, invalidos, cambioPendiente }) %>
+<div class="shell" id="shell">
+  <%- include('chat-panel') %>
+
+  <section class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="status-cluster">
+        <span class="status-dot"></span>
+        <span class="status-copy"><strong>Construir un tablero</strong><span>Capa semántica</span></span>
+      </div>
+      <span class="autosave">✓ Evaluación semántica validada</span>
+    </div>
+
+    <div class="canvas-scroll">
+      <div class="dashboard">
+        <div class="hero-construir">
+          <div class="hero-icono" aria-hidden="true">🛠️</div>
+          <h2>Hablar lo que necesitas para construir el Tablero que necesitas</h2>
+          <p>Describe qué quieres ver (ej. "top clientes de ventas") y el agente lo lee desde la capa semántica: te sugiere un tablero y lo crea si se lo pides — validado contra Odoo antes de guardarse.</p>
+
+          <div class="chips-modulo">
+            <h3>Ventas</h3>
+            <div class="chips-fila">
+              <% sugerencias.filter((s) => s.modulo === 'ventas').forEach((s) => { %>
+                <button type="button" class="chip" data-comando="<%= s.comando %>"><%= s.etiqueta %></button>
+              <% }) %>
+            </div>
+            <h3>Compras</h3>
+            <div class="chips-fila">
+              <% sugerencias.filter((s) => s.modulo === 'compras').forEach((s) => { %>
+                <button type="button" class="chip" data-comando="<%= s.comando %>"><%= s.etiqueta %></button>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="canvas-footer">
+      <span>Los tableros ya creados siguen disponibles en las pestañas de arriba. Escribe "ayuda" en el chat para ver todos los comandos.</span>
+    </footer>
+  </section>
+
+  <%- include('inspector', { cambioPendiente }) %>
+</div>
+<script>
+  document.querySelectorAll('.chip').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.dispatchEvent(new CustomEvent('chat-enviar-comando', { detail: btn.dataset.comando }));
+    });
+  });
+</script>
+</body>
+</html>

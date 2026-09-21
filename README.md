@@ -68,8 +68,21 @@ a la base de datos.
 5. **Orden de las pestañas**: cada tablero puede declarar `posicion` (número)
    para fijar su lugar entre las pestañas del workspace; a igual `posicion` se
    ordenan por nombre de archivo. Sin `posicion`, un tablero queda al final.
-   Orden actual: Ventas (1, pestaña inicial — `/tableros` redirige ahí),
-   Compras (2).
+   Orden actual: Ventas (1), Compras (2).
+
+5b. **Página de inicio** (`GET /tableros`, `views/tableros-inicio.ejs`): ya no
+    redirige a un tablero — muestra, dentro del mismo canvas de siempre, un
+    hero "Hablar lo que necesitas para construir el Tablero que necesitas"
+    con chips de las combinaciones dimensión+medida más usadas de Ventas y
+    Compras (`SUGERENCIAS_HERO` en `src/routes/tableros.js`). Cada chip
+    dispara un evento `chat-enviar-comando` (`document.dispatchEvent`) que
+    `views/chat-panel.ejs` escucha y envía como si el usuario lo hubiera
+    escrito — mismo mecanismo que ya usaba el topbar para abrir el
+    historial, para no acoplar la página al chat directamente. Las
+    sugerencias se filtran contra `semantica.resolverConcepto` antes de
+    mostrarse, para que un concepto renombrado o borrado desde `/semantica`
+    nunca deje un chip roto. Los tableros ya creados siguen accesibles por
+    las pestañas del topbar, como siempre.
 
 6. **Tableros de tipo especial** (`src/agregaciones.js` + un módulo por
    tablero): cuando un tablero necesita combinar dos modelos y filtros
@@ -287,9 +300,10 @@ quedar completamente aislados de la red.
   limpia siempre en un hook `after`.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
-  rutas protegidas, login inválido/válido, que `/tableros` redirige al
-  primer tablero válido con datos reales de la página renderizada (Ventas y
-  Compras), y que `/semantica` respete el control de acceso: sin sesión
+  rutas protegidas, login inválido/válido, que `/tableros` muestre el hero
+  "construir un tablero" con los chips de Ventas/Compras, que los tableros
+  existentes (Ventas y Compras) se sigan viendo con datos reales por sus
+  pestañas, y que `/semantica` respete el control de acceso: sin sesión
   redirige a `/login`, con sesión pero sin `base.group_system` responde
   `403`, y con perfil administrador lista los conceptos y muestra el link
   del topbar.
