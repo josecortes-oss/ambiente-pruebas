@@ -191,3 +191,67 @@ describe('responderChat — edición de tableros (con evaluación semántica)', 
     assert.match(r.respuesta, /No existe el tablero/);
   });
 });
+
+describe('responderChat — comandos de CRM, Financiero, Inventario y Producción', () => {
+  test('CRM: pipeline, top oportunidades, por etapa y por vendedor', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo) => {
+      assert.equal(modelo, 'crm.lead');
+      if (metodo === 'search_count') return 17;
+      if (metodo === 'search_read') {
+        return [{ name: 'Oportunidad A', partner_id: [1, 'Cliente A'], stage_id: [2, 'Qualified'], expected_revenue: 5000 }];
+      }
+      return [{ expected_revenue: 320200, stage_id: [1, 'New'], user_id: [2, 'Vendedor'] }];
+    });
+    assert.match((await responderChat('pipeline crm')).respuesta, /17 oportunidades abiertas/);
+    assert.match((await responderChat('resumen de crm')).respuesta, /oportunidades abiertas/);
+    assert.match((await responderChat('top oportunidades')).respuesta, /Oportunidad A — Cliente A \(Qualified\)/);
+    assert.match((await responderChat('oportunidades por etapa')).respuesta, /New: 320.200/);
+    assert.match((await responderChat('oportunidades por vendedor')).respuesta, /Vendedor: 320.200/);
+  });
+
+  test('Financiero: facturas pendientes, top clientes y por estado', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args) => {
+      assert.equal(modelo, 'account.move');
+      if (metodo === 'search_count') return 9;
+      if (args[2] && args[2][0] === 'partner_id') return [{ partner_id: [1, 'Cliente A'], amount_total: 500 }];
+      if (args[1][0] === 'amount_residual') return [{ amount_residual: 148999 }];
+      return [{ state: 'posted', amount_total: 500 }];
+    });
+    assert.match((await responderChat('facturas pendientes')).respuesta, /9, monto adeudado total 148.999/);
+    assert.match((await responderChat('top clientes facturacion')).respuesta, /Cliente A: 500/);
+    assert.match((await responderChat('facturas por estado')).respuesta, /posted: 500/);
+  });
+
+  test('Inventario: top productos en stock, stock de un producto y productos sin stock', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args) => {
+      assert.equal(modelo, 'stock.quant');
+      if (metodo === 'search_read') return [{ product_id: [2, 'Producto B'], quantity: 0 }];
+      return [{ product_id: [1, 'Producto A'], quantity: 10 }];
+    });
+    assert.match((await responderChat('top productos en stock')).respuesta, /Producto A: 10/);
+    assert.match((await responderChat('stock de producto a')).respuesta, /Producto A: 10 unidades/);
+    assert.match((await responderChat('productos sin stock')).respuesta, /Producto B/);
+  });
+
+  test('stock de <producto> sin coincidencias responde con un mensaje claro, no una lista vacía', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => []);
+    const r = await responderChat('stock de algo-que-no-existe');
+    assert.match(r.respuesta, /No encontré productos que coincidan con "algo-que-no-existe"/);
+  });
+
+  test('Producción: resumen, por estado y top productos producidos', async (t) => {
+    let llamadas = 0;
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args) => {
+      assert.equal(modelo, 'mrp.production');
+      if (metodo === 'search_count') {
+        llamadas += 1;
+        return llamadas === 1 ? 8 : 4;
+      }
+      if (args[0].length && args[0][0][0] === 'state') return [{ product_id: [1, 'Producto A'], product_qty: 13 }];
+      return [{ state: 'done', product_qty: 18 }];
+    });
+    assert.match((await responderChat('resumen produccion')).respuesta, /8 órdenes totales, 4 pendientes/);
+    assert.match((await responderChat('produccion por estado')).respuesta, /done: 18/);
+    assert.match((await responderChat('top productos producidos')).respuesta, /Producto A: 13/);
+  });
+});

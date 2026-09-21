@@ -5,6 +5,7 @@ const odooClient = require('./odoo-client');
 const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
 const { obtenerDatosVentasMensuales } = require('./ventas-mensual');
 const { PERIODOS } = require('./agregaciones');
+const consultasModulos = require('./consultas-modulos');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
 
@@ -103,12 +104,40 @@ async function guardarSiValido(id, def) {
 }
 
 const AYUDA = `Comandos disponibles:
+
+General:
 - listar tableros
 - campos de <modelo>                              (ej. campos de sale.order)
+- ayuda
+
+Ventas:
 - top productos [de <período>]
 - top clientes [de <período>]
 - ventas por vendedor [de <período>]
 - ventas de <período>                             (períodos: este mes, mes anterior, este año, año anterior, todo)
+
+CRM:
+- pipeline crm                                    (oportunidades abiertas y valor esperado total)
+- top oportunidades
+- oportunidades por etapa
+- oportunidades por vendedor
+
+Financiero:
+- facturas pendientes                             (facturas de venta no pagadas y monto adeudado)
+- top clientes facturacion
+- facturas por estado
+
+Inventario:
+- top productos en stock
+- stock de <producto>                             (ej. stock de silla)
+- productos sin stock
+
+Producción:
+- resumen produccion
+- produccion por estado
+- top productos producidos
+
+Edición de tableros genéricos:
 - crear tablero <id>: modelo <modelo>, campos <c1,c2,...>[, titulo <texto>]
 - agregar campo <campo> a <id>
 - quitar campo <campo> de <id>
@@ -176,6 +205,88 @@ const COMANDOS = [
       const total = datos.filas.reduce((acc, f) => acc + (f.amount_total || 0), 0);
       return `Ventas ${etiquetaPeriodo(periodo)}: ${datos.filas.length} órdenes, total ${total.toLocaleString('es-CL', { maximumFractionDigits: 2 })}.`;
     },
+  },
+  // --- CRM ---
+  {
+    patron: /^(?:resumen|pipeline)(?: de)? crm$/,
+    accion: async () => {
+      const { cantidad, total } = await consultasModulos.obtenerPipelineCRM();
+      return `Pipeline CRM: ${cantidad} oportunidades abiertas, valor esperado total ${total.toLocaleString('es-CL', { maximumFractionDigits: 2 })}.`;
+    },
+  },
+  {
+    patron: /^top oportunidades$/,
+    accion: async () => {
+      const oportunidades = await consultasModulos.obtenerTopOportunidades();
+      if (!oportunidades.length) return 'No hay oportunidades abiertas.';
+      return oportunidades
+        .map((o, i) => `${i + 1}. ${o.nombre} — ${o.cliente} (${o.etapa}): ${o.monto.toLocaleString('es-CL', { maximumFractionDigits: 2 })}`)
+        .join('\n');
+    },
+  },
+  {
+    patron: /^oportunidades por etapa$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerOportunidadesPorEtapa()),
+  },
+  {
+    patron: /^oportunidades por vendedor$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerOportunidadesPorVendedor()),
+  },
+  // --- Financiero / Facturación ---
+  {
+    patron: /^facturas pendientes$/,
+    accion: async () => {
+      const { cantidad, total } = await consultasModulos.obtenerFacturasPendientes();
+      if (!cantidad) return 'No hay facturas de venta pendientes de cobro.';
+      return `Facturas pendientes de cobro: ${cantidad}, monto adeudado total ${total.toLocaleString('es-CL', { maximumFractionDigits: 2 })}.`;
+    },
+  },
+  {
+    patron: /^top clientes facturacion$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerTopClientesFacturacion()),
+  },
+  {
+    patron: /^facturas por estado$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerFacturasPorEstado()),
+  },
+  // --- Inventario ---
+  {
+    patron: /^top productos en stock$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerTopProductosStock()),
+  },
+  {
+    patron: /^stock de (.+)$/,
+    accion: async ([, nombreProducto]) => {
+      const resultados = await consultasModulos.obtenerStockDeProducto(nombreProducto);
+      if (!resultados.length) return `No encontré productos que coincidan con "${nombreProducto}".`;
+      return resultados
+        .map((r) => `- ${r.producto}: ${r.cantidad.toLocaleString('es-CL', { maximumFractionDigits: 2 })} unidades`)
+        .join('\n');
+    },
+  },
+  {
+    patron: /^productos sin stock$/,
+    accion: async () => {
+      const productos = await consultasModulos.obtenerProductosSinStock();
+      if (!productos.length) return 'No hay productos en quiebre de stock en ubicaciones internas.';
+      return productos.map((p) => `- ${p}`).join('\n');
+    },
+  },
+  // --- Producción ---
+  {
+    patron: /^resumen produccion$/,
+    accion: async () => {
+      const { cantidad, pendientes } = await consultasModulos.obtenerResumenProduccion();
+      return `Producción: ${cantidad} órdenes totales, ${pendientes} pendientes (borrador/confirmadas/en curso).`;
+    },
+  },
+  {
+    patron: /^produccion por estado$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerProduccionPorEstado()),
+  },
+  {
+    patron: /^top productos producidos$/,
+    accion: async () => formatearEntradas(await consultasModulos.obtenerTopProductosProducidos()),
   },
   {
     patron: /^crear tablero ([\w-]+): modelo ([\w.]+), campos ([\w., ]+?)(?:, titulo (.+))?$/,

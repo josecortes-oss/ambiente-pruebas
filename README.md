@@ -108,11 +108,27 @@ a la base de datos.
    **sin IA** — un parser de comandos de texto fijos (expresiones regulares), sin costo
    ni credenciales externas. Cada mensaje se compara contra una lista de patrones
    (`COMANDOS` en `src/chat.js`); si no coincide ninguno, responde sugiriendo escribir
-   "ayuda". Dos tipos de comandos:
-   - **Consulta de datos** (`top productos [de <período>]`, `top clientes [de ...]`,
-     `ventas por vendedor [de ...]`, `ventas de <período>`, `campos de <modelo>`,
-     `listar tableros`): reutilizan `obtenerDatosVentasMensuales` (mismas agregaciones
-     del tablero "Ventas") o `fields_get` directo, siempre por la conexión de servicio.
+   "ayuda". Tres tipos de comandos:
+   - **Consulta de datos de Ventas/Compras** (`top productos [de <período>]`,
+     `top clientes [de ...]`, `ventas por vendedor [de ...]`, `ventas de <período>`,
+     `campos de <modelo>`, `listar tableros`): reutilizan `obtenerDatosVentasMensuales`
+     (mismas agregaciones del tablero "Ventas") o `fields_get` directo, siempre por la
+     conexión de servicio.
+   - **Consulta de datos de CRM, Financiero, Inventario y Producción**
+     (`src/consultas-modulos.js`, sin filtro de período — son resúmenes directos):
+     - CRM (`crm.lead`): `pipeline crm`, `top oportunidades`,
+       `oportunidades por etapa`, `oportunidades por vendedor`.
+     - Financiero (`account.move`): `facturas pendientes`, `top clientes facturacion`,
+       `facturas por estado`.
+     - Inventario (`stock.quant`, restringido a ubicaciones internas):
+       `top productos en stock`, `stock de <producto>` (busca por nombre, `ilike`),
+       `productos sin stock`.
+     - Producción (`mrp.production`): `resumen produccion`, `produccion por estado`,
+       `top productos producidos` (solo órdenes terminadas).
+
+     Estas consultas no pasan por `validateDefinition` antes de ejecutarse (no son
+     tableros, son código fijo que ya referencia campos reales verificados contra
+     Odoo durante el desarrollo), a diferencia de los tableros YAML.
    - **Edición de tableros genéricos** (`crear tablero ...`, `agregar/quitar campo ...`,
      `agregar grafico a ...`, `eliminar tablero ...`): modifican el objeto y llaman a
      `guardarSiValido`, que **reutiliza `validateDefinition`** (la misma evaluación
@@ -188,13 +204,21 @@ quedar completamente aislados de la red.
 - **`test/compras-mensual.test.js`**: `obtenerDatosCompras` — que el dominio
   de `purchase.order`/`purchase.order.line` incluya el proveedor filtrado, y
   que las agregaciones (top proveedores, top productos) salgan correctas.
-- **`test/chat.test.js`**: `responderChat` — comandos de consulta (incluida
-  la regresión del bug de normalización que rompía `sale.order` → `saleorder`),
-  y el ciclo completo de edición: crear/agregar/quitar campo, la protección
-  de los tableros "ventas" y "compras", y que `deshacerUltimoCambio` de verdad
-  borre un tablero recién creado y restaure el YAML anterior en una edición.
-  Escribe archivos reales bajo `tableros/` con un id de prueba
-  (`test_tmp_chat`) y los limpia siempre en un hook `after`.
+- **`test/consultas-modulos.test.js`**: cada función de CRM/Financiero/
+  Inventario/Producción — dominios correctos (p. ej. solo oportunidades
+  abiertas, solo facturas de venta publicadas y no pagadas, `stock.quant`
+  siempre restringido a ubicaciones internas, producción solo cuenta como
+  "producido" lo que está en estado `done`) y el formato de lo que devuelven.
+- **`test/chat.test.js`**: `responderChat` — comandos de consulta de Ventas/
+  Compras (incluida la regresión del bug de normalización que rompía
+  `sale.order` → `saleorder`) y de CRM/Financiero/Inventario/Producción
+  (que cada patrón de comando esté realmente conectado a su función, no solo
+  que la función exista), el ciclo completo de edición: crear/agregar/quitar
+  campo, la protección de los tableros "ventas" y "compras", y que
+  `deshacerUltimoCambio` de verdad borre un tablero recién creado y restaure
+  el YAML anterior en una edición. Escribe archivos reales bajo `tableros/`
+  con un id de prueba (`test_tmp_chat`) y los limpia siempre en un hook
+  `after`.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
   rutas protegidas, login inválido/válido, y que `/tableros` redirige al
