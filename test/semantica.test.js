@@ -46,6 +46,32 @@ describe('semantica — el diccionario en sí', () => {
       assert.ok(items.some((c) => c.tipo === 'medida'), `"${m}" sin medidas`);
     }
   });
+
+  test('conceptos de control de lotes: van en el módulo inventario, sobre stock.quant/stock.lot', () => {
+    const lote = semantica.resolverConcepto('lote');
+    assert.deepEqual(
+      { modulo: lote.modulo, modelo: lote.modelo, campo: lote.campo, tipo: lote.tipo },
+      { modulo: 'inventario', modelo: 'stock.quant', campo: 'lot_id', tipo: 'dimension' }
+    );
+
+    const numeroLote = semantica.resolverConcepto('numero_lote');
+    assert.deepEqual(
+      { modulo: numeroLote.modulo, modelo: numeroLote.modelo, campo: numeroLote.campo, tipo: numeroLote.tipo },
+      { modulo: 'inventario', modelo: 'stock.lot', campo: 'name', tipo: 'dimension' }
+    );
+
+    const productoLote = semantica.resolverConcepto('producto_lote');
+    assert.deepEqual(
+      { modulo: productoLote.modulo, modelo: productoLote.modelo, campo: productoLote.campo, tipo: productoLote.tipo },
+      { modulo: 'inventario', modelo: 'stock.lot', campo: 'product_id', tipo: 'dimension' }
+    );
+
+    const cantidadLote = semantica.resolverConcepto('cantidad_lote');
+    assert.deepEqual(
+      { modulo: cantidadLote.modulo, modelo: cantidadLote.modelo, campo: cantidadLote.campo, tipo: cantidadLote.tipo, agregacion: cantidadLote.agregacion },
+      { modulo: 'inventario', modelo: 'stock.lot', campo: 'product_qty', tipo: 'medida', agregacion: 'suma' }
+    );
+  });
 });
 
 describe('semantica — validarConceptos', () => {
@@ -90,6 +116,15 @@ describe('semantica — construirDefinicionDesdeConceptos', () => {
     assert.equal(def.grafico.agrupar_por, 'partner_id');
     assert.equal(def.grafico.medir, 'expected_revenue');
     assert.deepEqual(def.dominio, [['type', '=', 'opportunity'], ['active', '=', true]]);
+  });
+
+  test('arma "cantidad de stock por lote" combinando conceptos de control de lotes con los de inventario ya existentes', () => {
+    const { def, error } = semantica.construirDefinicionDesdeConceptos('id', 'inventario', ['lote', 'cantidad_stock']);
+    assert.equal(error, undefined);
+    assert.equal(def.modelo, 'stock.quant');
+    assert.equal(def.grafico.agrupar_por, 'lot_id');
+    assert.equal(def.grafico.medir, 'quantity');
+    assert.deepEqual(def.dominio, [['location_id.usage', '=', 'internal']]);
   });
 
   test('rechaza mezclar conceptos de distintos modelos (cabecera + línea)', () => {

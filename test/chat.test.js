@@ -363,14 +363,17 @@ describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
   });
 
   test('"crear tablero <id> de <modulo>" sin "con" usa la sugerencia por defecto', async (t) => {
-    // cantidad_stock trae su propio dominio (location_id.usage='internal').
+    // cantidad_stock trae su propio dominio (location_id.usage='internal'); stock.quant
+    // es el modelo con más conceptos en inventario (producto_stock, lote, cantidad_stock),
+    // así que la sugerencia por defecto toma sus 2 dimensiones + 1 medida.
     t.mock.method(odooClient, 'executeKw', async () => ({
       product_id: { string: 'Product', type: 'many2one' },
       quantity: { string: 'Quantity', type: 'float' },
       location_id: { string: 'Location', type: 'many2one' },
+      lot_id: { string: 'Lot/Serial Number', type: 'many2one' },
     }));
     const r = await responderChat(`crear tablero ${ID_SEMANTICA} de inventario`);
-    assert.match(r.respuesta, /producto_stock, cantidad_stock/);
+    assert.match(r.respuesta, /producto_stock, lote, cantidad_stock/);
     deshacerUltimoCambio();
   });
 

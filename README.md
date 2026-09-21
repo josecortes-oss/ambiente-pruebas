@@ -237,6 +237,17 @@ a la base de datos.
     vía `fields_get`, que cada modelo/campo sigue existiendo — misma lógica
     que `validateDefinition`, pero para la capa semántica en sí.
 
+    Dentro de "inventario" hay además un grupo de **control de lotes**
+    (`stock.lot`/`stock.quant.lot_id`, confirmados contra Odoo real, con
+    lotes reales como "0000000000029"): `lote` (dimensión sobre
+    `stock.quant.lot_id`, para combinarla con la medida `cantidad_stock` que
+    ya existía y ver cuánto stock hay por lote/serie) y, para un tablero
+    centrado en el propio lote, `numero_lote`/`producto_lote` (dimensiones
+    sobre `stock.lot`) con `cantidad_lote` (medida, `stock.lot.product_qty`).
+    No es un módulo nuevo — viven en `modulo: inventario`, junto a
+    `producto_stock`/`cantidad_stock`, porque el control de lotes es una
+    faceta de inventario, no un dominio de negocio aparte.
+
     El chat actúa como un agente simple sobre esta capa (determinista, sin
     IA — ver punto 7): **lee** (`conceptos`, `conceptos de <modulo>`),
     **sugiere** (`sugerir tablero de <modulo>[ con <conceptos>]`, muestra el
@@ -346,12 +357,17 @@ quedar completamente aislados de la red.
   no existe en Odoo, que `construirDefinicionDesdeConceptos` rechace mezclar
   modelos/módulos o nombres inexistentes (y que, para un nombre mal escrito,
   `sugerirConceptoParecido` proponga el concepto real más cercano — "¿quisiste
-  decir...?"), que la sugerencia por defecto de cada módulo produzca siempre
-  una definición válida, y (contra un archivo temporal, nunca el real — ver
-  punto 11 arriba) que `guardarConcepto` rechace forma inválida o campos que
-  no existen en Odoo sin escribir nada, que el upsert funcione, que
-  `eliminarConcepto` falle con un mensaje claro sobre un concepto inexistente,
-  y que el encabezado explicativo sobreviva a un guardado.
+  decir...?"), que arme "cantidad de stock por lote" combinando `lote` con
+  `cantidad_stock` (dos conceptos del mismo modelo pero de grupos distintos
+  del YAML), que los 4 conceptos de control de lotes apunten al
+  modulo/modelo/campo/tipo correctos (`stock.quant.lot_id`,
+  `stock.lot.name`/`product_id`/`product_qty`), que la sugerencia por
+  defecto de cada módulo produzca siempre una definición válida, y (contra
+  un archivo temporal, nunca el real — ver punto 11 arriba) que
+  `guardarConcepto` rechace forma inválida o campos que no existen en Odoo
+  sin escribir nada, que el upsert funcione, que `eliminarConcepto` falle
+  con un mensaje claro sobre un concepto inexistente, y que el encabezado
+  explicativo sobreviva a un guardado.
 - **`test/chat.test.js`**: `responderChat` — comandos de consulta de Ventas/
   Compras (incluida la regresión del bug de normalización que rompía
   `sale.order` → `saleorder`) y de CRM/Financiero/Inventario/Producción

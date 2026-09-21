@@ -223,6 +223,40 @@ cantidad_stock:
   descripcion: "Suma de quantity en stock.quant, ubicaciones internas."
   dominio: [['location_id.usage', '=', 'internal']]
 
+# ---------- Control de lotes (stock.lot / stock.quant.lot_id) ----------
+lote:
+  modulo: inventario
+  modelo: stock.quant
+  campo: lot_id
+  tipo: dimension
+  etiqueta: "Lote/Serie"
+  descripcion: "Lote o número de serie (stock.lot) asociado a la existencia en stock.quant. Combina con \"cantidad_stock\" para ver cuánto stock hay por lote."
+
+numero_lote:
+  modulo: inventario
+  modelo: stock.lot
+  campo: name
+  tipo: dimension
+  etiqueta: "Número de lote/serie"
+  descripcion: "Identificador del lote o serie (stock.lot.name)."
+
+producto_lote:
+  modulo: inventario
+  modelo: stock.lot
+  campo: product_id
+  tipo: dimension
+  etiqueta: "Producto"
+  descripcion: "Producto asociado al lote/serie (stock.lot.product_id)."
+
+cantidad_lote:
+  modulo: inventario
+  modelo: stock.lot
+  campo: product_qty
+  tipo: medida
+  agregacion: suma
+  etiqueta: "Cantidad en el lote"
+  descripcion: "Suma de product_qty (existencia calculada por Odoo) en stock.lot."
+
 # ---------- Producción (mrp.production) ----------
 producto_producido:
   modulo: produccion
