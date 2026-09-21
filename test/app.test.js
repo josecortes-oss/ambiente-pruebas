@@ -115,7 +115,7 @@ describe('app (integración de rutas)', () => {
     const r = await fetch(`${baseUrl}/tableros`, { headers: { Cookie: cookie } });
     assert.equal(r.status, 200);
     const html = await r.text();
-    assert.match(html, /Escribe en Chat que necesitas construir en Tableros/);
+    assert.match(html, /Escribe en el Chat lo que necesitas para construir los Tableros/);
     assert.match(html, /Ventas por cliente/);
     assert.match(html, /Compras por proveedor/);
 
