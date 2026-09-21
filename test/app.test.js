@@ -265,4 +265,73 @@ describe('app (integración de rutas)', () => {
       assert.deepEqual((await despues.json()).versiones, []);
     });
   });
+
+  describe('cambiar tipo de gráfico (barra/línea/torta)', () => {
+    const ID_G = 'test_tmp_app_grafico';
+    const ARCHIVO_G = path.join(__dirname, '..', 'tableros', `${ID_G}.yaml`);
+    function limpiarG() {
+      if (fs.existsSync(ARCHIVO_G)) fs.unlinkSync(ARCHIVO_G);
+      versiones.eliminarVersiones(ID_G);
+    }
+    after(limpiarG);
+
+    test('renderiza barra (por defecto), y línea/torta tras "cambiar tipo de grafico"', async (t) => {
+      limpiarG();
+      t.mock.method(odooClient, 'authenticate', async () => 2);
+      t.mock.method(odooClient, 'executeKw', async (modelo, metodo) => {
+        if (metodo === 'fields_get') return fieldsGetFalso(['name', 'partner_id', 'amount_total']);
+        if (metodo === 'search_read') {
+          return [{ name: 'X1', partner_id: [10, 'Cliente Test'], amount_total: 500 }];
+        }
+        throw new Error(`llamada no esperada: ${modelo}.${metodo}`);
+      });
+
+      const login = await fetch(`${baseUrl}/login`, {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'login=admin&password=lo-que-sea',
+      });
+      const cookie = cookieDe(login);
+
+      await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: `crear tablero ${ID_G}: modelo res.partner, campos name` }),
+      });
+      await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: `agregar grafico a ${ID_G}: agrupar por partner_id midiendo amount_total` }),
+      });
+
+      const barra = await fetch(`${baseUrl}/tableros/${ID_G}`, { headers: { Cookie: cookie } });
+      assert.equal(barra.status, 200);
+      assert.match(await barra.text(), /class="bars"/);
+
+      const cambioLinea = await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: `cambiar tipo de grafico a linea en ${ID_G}` }),
+      });
+      assert.match((await cambioLinea.json()).respuesta, /cambiado a "linea"/);
+
+      const linea = await fetch(`${baseUrl}/tableros/${ID_G}`, { headers: { Cookie: cookie } });
+      assert.equal(linea.status, 200);
+      assert.match(await linea.text(), /class="linea-grafico"/);
+
+      await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje: `cambiar tipo de grafico a torta en ${ID_G}` }),
+      });
+
+      const torta = await fetch(`${baseUrl}/tableros/${ID_G}`, { headers: { Cookie: cookie } });
+      assert.equal(torta.status, 200);
+      const tortaHtml = await torta.text();
+      assert.match(tortaHtml, /class="torta-wrap"/);
+      assert.match(tortaHtml, /conic-gradient/);
+      assert.match(tortaHtml, /Cliente Test/);
+    });
+  });
 });

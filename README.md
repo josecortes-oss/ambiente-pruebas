@@ -149,13 +149,25 @@ a la base de datos.
      tableros, son código fijo que ya referencia campos reales verificados contra
      Odoo durante el desarrollo), a diferencia de los tableros YAML.
    - **Edición de tableros genéricos** (`crear tablero ...`, `agregar/quitar campo ...`,
-     `agregar grafico a ...`, `eliminar tablero ...`): modifican el objeto y llaman a
-     `guardarSiValido`, que **reutiliza `validateDefinition`** (la misma evaluación
-     semántica de los tableros normales) antes de escribir el YAML — si el campo o
-     modelo no existe en Odoo, no se guarda nada y se devuelve el error. Los tableros
-     especiales "ventas" y "compras" (`TABLEROS_ESPECIALES` en `src/chat.js`) están
-     excluidos de todos los comandos de edición porque su lógica vive en código, no
-     en YAML genérico.
+     `agregar grafico a ...`, `cambiar tipo de grafico a <barra|linea|torta> en <id>`,
+     `eliminar tablero ...`): modifican el objeto y llaman a `guardarSiValido`, que
+     **reutiliza `validateDefinition`** (la misma evaluación semántica de los tableros
+     normales) antes de escribir el YAML — si el campo o modelo no existe en Odoo, no
+     se guarda nada y se devuelve el error. `validateDefinition` también exige que
+     `grafico.tipo_grafico`, cuando está presente, sea uno de esos tres valores
+     (`src/tableros.js`, `TIPOS_GRAFICO`). Los tableros especiales "ventas" y "compras"
+     (`TABLEROS_ESPECIALES` en `src/chat.js`) están excluidos de todos los comandos de
+     edición porque su lógica vive en código, no en YAML genérico — así que nunca
+     cambian de tipo de gráfico por chat.
+
+     "cambiar tipo de grafico" es la alternativa **determinista** (sin LLM) a pedirle
+     a un agente dinámico que interprete "cambia esto a torta": cubre ese caso puntual
+     con un comando fijo más, en vez de agregar un LLM de pago solo para eso. El
+     renderizado real de cada tipo está en `views/tablero-detalle.ejs`: "barra" (el
+     que ya existía, `.bars`), "linea" (un `<svg>` con `<polyline>` + puntos) y "torta"
+     (un círculo con `conic-gradient` calculado en el propio EJS + una leyenda) — los
+     tres leen la misma `grafico.entradas` que ya arma la ruta, ninguno pide datos
+     extra a Odoo.
 
    Ver la lista completa de comandos escribiendo `ayuda` en el chat, o en la constante
    `AYUDA` de `src/chat.js`.
@@ -318,7 +330,8 @@ quedar completamente aislados de la red.
   límite de entradas.
 - **`test/tableros.test.js`**: `validateDefinition` — la evaluación semántica
   en sí: modelo/campo faltante o inexistente, campos usados en `dominio` o en
-  `grafico`, y los tipos especiales `ventas_mensual`/`compras_mensual` contra
+  `grafico`, que `grafico.tipo_grafico` solo acepte `barra`/`linea`/`torta`, y
+  los tipos especiales `ventas_mensual`/`compras_mensual` contra
   `CAMPOS_POR_TIPO`.
 - **`test/compras-mensual.test.js`**: `obtenerDatosCompras` — que el dominio
   de `purchase.order`/`purchase.order.line` incluya el proveedor filtrado, y
@@ -357,10 +370,14 @@ quedar completamente aislados de la red.
   sume una versión más al historial (nunca lo reescribe), que eliminar
   versiones limpie el historial sin tocar el tablero actual y que el
   contador vuelva a empezar en 1, y que los tableros especiales sigan
-  protegidos también contra `restaurar version`. Escribe archivos reales
-  bajo `tableros/` y `tableros/.versiones/` con ids de prueba
-  (`test_tmp_chat`, `test_tmp_semantica`, `test_tmp_versiones`) y los limpia
-  siempre en un hook `after`.
+  protegidos también contra `restaurar version`; y `cambiar tipo de grafico a
+  <barra|linea|torta> en <id>` — que cambie el tipo y quede versionado, que
+  avise con un mensaje claro si el tablero no tiene un bloque "grafico"
+  todavía o si el tablero no existe, y que los tableros especiales también
+  estén protegidos contra este comando. Escribe archivos reales bajo
+  `tableros/` y `tableros/.versiones/` con ids de prueba (`test_tmp_chat`,
+  `test_tmp_semantica`, `test_tmp_versiones`) y los limpia siempre en un
+  hook `after`.
 - **`test/versiones.test.js`**: `src/versiones.js` en aislamiento —
   `guardarVersion` devuelve el número 1-based correcto y agrega al final,
   `obtenerVersion` devuelve `null` para números que no existen,
@@ -374,7 +391,12 @@ quedar completamente aislados de la red.
   pestañas, y que `/semantica` respete el control de acceso: sin sesión
   redirige a `/login`, con sesión pero sin `base.group_system` responde
   `403`, y con perfil administrador lista los conceptos y muestra el link
-  del topbar.
+  del topbar; el panel de versiones (`GET /tableros/:id/versiones`,
+  `POST /tableros/:id/versiones/eliminar`); y que un tablero genérico creado
+  por chat renderice de verdad las tres vistas de gráfico (`class="bars"`
+  por defecto, `class="linea-grafico"` y `class="torta-wrap"` con
+  `conic-gradient` tras "cambiar tipo de grafico"), no solo que el chat
+  devuelva el mensaje de confirmación.
 
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
 `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a

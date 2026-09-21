@@ -168,16 +168,58 @@ describe('responderChat — edición de tableros (con evaluación semántica)', 
     limpiarArchivoPrueba();
   });
 
+  test('"cambiar tipo de grafico a <tipo> en <id>" cambia el tipo y queda versionado', async (t) => {
+    limpiarArchivoPrueba();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'partner_id', 'amount_total']));
+    await responderChat(`crear tablero ${ID_PRUEBA}: modelo res.partner, campos name`);
+    await responderChat(`agregar grafico a ${ID_PRUEBA}: agrupar por partner_id midiendo amount_total`);
+
+    const r = await responderChat(`cambiar tipo de grafico a torta en ${ID_PRUEBA}`);
+    assert.match(r.respuesta, /cambiado a "torta"/);
+    assert.match(r.respuesta, /Versión 3 guardada/);
+    assert.equal(r.tableroModificado, ID_PRUEBA);
+    const contenido = fs.readFileSync(ARCHIVO_PRUEBA, 'utf8');
+    assert.match(contenido, /tipo_grafico: torta/);
+
+    deshacerUltimoCambio();
+    limpiarArchivoPrueba();
+  });
+
+  test('"cambiar tipo de grafico" sin un bloque "grafico" previo responde con un mensaje claro', async (t) => {
+    limpiarArchivoPrueba();
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name']));
+    await responderChat(`crear tablero ${ID_PRUEBA}: modelo res.partner, campos name`);
+
+    const r = await responderChat(`cambiar tipo de grafico a linea en ${ID_PRUEBA}`);
+    assert.match(r.respuesta, /no tiene un bloque "grafico"/);
+    assert.equal(r.tableroModificado, null);
+
+    deshacerUltimoCambio();
+    limpiarArchivoPrueba();
+  });
+
+  test('"cambiar tipo de grafico" en un tablero inexistente no rompe nada', async () => {
+    const r = await responderChat('cambiar tipo de grafico a barra en no_existe_este_id');
+    assert.match(r.respuesta, /No existe el tablero/);
+  });
+
+  test('"cambiar tipo de grafico" rechaza tipos que no sean barra/linea/torta', async () => {
+    const r = await responderChat(`cambiar tipo de grafico a pastel en ${ID_PRUEBA}`);
+    assert.match(r.respuesta, /No reconozco ese comando/);
+  });
+
   test('los tableros especiales "ventas" y "compras" están protegidos de todos los comandos de edición', async () => {
     const comandos = [
       'agregar campo email a ventas',
       'quitar campo email de ventas',
       'agregar grafico a ventas: agrupar por partner_id midiendo amount_total',
+      'cambiar tipo de grafico a torta en ventas',
       'eliminar tablero ventas',
       'crear tablero ventas: modelo sale.order, campos name',
       'agregar campo email a compras',
       'quitar campo email de compras',
       'agregar grafico a compras: agrupar por partner_id midiendo amount_total',
+      'cambiar tipo de grafico a linea en compras',
       'eliminar tablero compras',
       'crear tablero compras: modelo purchase.order, campos name',
     ];

@@ -27,6 +27,8 @@ function loadAllDefinitions() {
     .sort((a, b) => (a.posicion ?? 999) - (b.posicion ?? 999) || a._id.localeCompare(b._id));
 }
 
+const TIPOS_GRAFICO = new Set(['barra', 'linea', 'torta']);
+
 const LOGICAL_OPERATORS = new Set(['&', '|', '!']);
 
 function extractDomainFields(domain) {
@@ -123,6 +125,9 @@ async function validateDefinition(def) {
     if (!def.grafico.medir) errors.push('El bloque "grafico" necesita "medir".');
     if (def.grafico.agrupar_por) camposReferenciados.add(def.grafico.agrupar_por);
     if (def.grafico.medir) camposReferenciados.add(def.grafico.medir);
+    if (def.grafico.tipo_grafico && !TIPOS_GRAFICO.has(def.grafico.tipo_grafico)) {
+      errors.push(`"tipo_grafico" debe ser uno de: ${[...TIPOS_GRAFICO].join(', ')} (no "${def.grafico.tipo_grafico}").`);
+    }
   }
 
   for (const campo of camposReferenciados) {

@@ -20,9 +20,11 @@
         </div>
 
         <% if (grafico) { %>
+          <% var tipoGrafico = def.grafico.tipo_grafico || 'barra'; %>
+          <% var ETIQUETA_TIPO_GRAFICO = { barra: 'Bar chart', linea: 'Line chart', torta: 'Pie chart' }; %>
           <div class="cards-row">
             <div class="card selectable"
-              data-tipo="Bar chart · <%= def.modelo %>"
+              data-tipo="<%= ETIQUETA_TIPO_GRAFICO[tipoGrafico] %> · <%= def.modelo %>"
               data-titulo="<%= grafico.titulo %>"
               data-metrica="<%= def.grafico.medir %> (suma)"
               data-dimension="<%= def.grafico.agrupar_por %>"
@@ -30,15 +32,55 @@
               data-modelo="<%= def.modelo %>"
               data-definido-en="tableros/<%= def._id %>.yaml">
               <div class="card-head"><h3><%= grafico.titulo %></h3><p>Click para ver el contexto semántico</p></div>
-              <div class="bars">
-                <% grafico.entradas.forEach(([etiqueta, valor]) => { %>
-                  <div class="bar-row">
-                    <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
-                    <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / grafico.max) * 100) %>%"></div></div>
-                    <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+
+              <% if (tipoGrafico === 'linea') { %>
+                <% var anchoSvg = 400, altoSvg = 160, margenSvg = 18, nSvg = grafico.entradas.length; %>
+                <% function xDe(i) { return nSvg > 1 ? margenSvg + (i * (anchoSvg - 2 * margenSvg) / (nSvg - 1)) : anchoSvg / 2; } %>
+                <% function yDe(valor) { return altoSvg - margenSvg - ((valor / grafico.max) * (altoSvg - 2 * margenSvg)); } %>
+                <svg class="linea-grafico" viewBox="0 0 <%= anchoSvg %> <%= altoSvg %>" preserveAspectRatio="none">
+                  <polyline
+                    points="<%= grafico.entradas.map(([, valor], i) => xDe(i) + ',' + yDe(valor)).join(' ') %>"
+                    fill="none" stroke="var(--accent)" stroke-width="2" />
+                  <% grafico.entradas.forEach(([etiqueta, valor], i) => { %>
+                    <circle cx="<%= xDe(i) %>" cy="<%= yDe(valor) %>" r="3.5" fill="var(--accent)"><title><%= etiqueta %>: <%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></title></circle>
+                  <% }) %>
+                </svg>
+                <div class="linea-etiquetas">
+                  <% grafico.entradas.forEach(([etiqueta]) => { %><span title="<%= etiqueta %>"><%= etiqueta %></span><% }) %>
+                </div>
+              <% } else if (tipoGrafico === 'torta') { %>
+                <% var PALETA_TORTA = ['#5b6ee8', '#2fb6a5', '#f2a93b', '#e8618c', '#7c5cf0', '#38b26a', '#e0555a', '#3ba7e0']; %>
+                <% var totalTorta = grafico.entradas.reduce((acc, [, valor]) => acc + valor, 0) || 1; %>
+                <% var acumuladoTorta = 0; %>
+                <% var segmentosTorta = grafico.entradas.map(([, valor], i) => {
+                     var pct = (valor / totalTorta) * 100;
+                     var inicio = acumuladoTorta;
+                     acumuladoTorta += pct;
+                     return PALETA_TORTA[i % PALETA_TORTA.length] + ' ' + inicio.toFixed(2) + '% ' + acumuladoTorta.toFixed(2) + '%';
+                   }); %>
+                <div class="torta-wrap">
+                  <div class="torta-circulo" style="background: conic-gradient(<%= segmentosTorta.join(', ') %>)"></div>
+                  <div class="torta-leyenda">
+                    <% grafico.entradas.forEach(([etiqueta, valor], i) => { %>
+                      <div class="torta-item">
+                        <span class="torta-color" style="background:<%= PALETA_TORTA[i % PALETA_TORTA.length] %>"></span>
+                        <span class="torta-label" title="<%= etiqueta %>"><%= etiqueta %></span>
+                        <span class="torta-valor"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+                      </div>
+                    <% }) %>
                   </div>
-                <% }) %>
-              </div>
+                </div>
+              <% } else { %>
+                <div class="bars">
+                  <% grafico.entradas.forEach(([etiqueta, valor]) => { %>
+                    <div class="bar-row">
+                      <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
+                      <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / grafico.max) * 100) %>%"></div></div>
+                      <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+                    </div>
+                  <% }) %>
+                </div>
+              <% } %>
             </div>
           </div>
         <% } %>

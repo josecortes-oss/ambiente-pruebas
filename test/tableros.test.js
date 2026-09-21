@@ -87,6 +87,25 @@ describe('validateDefinition (evaluación semántica)', () => {
     assert.match(resultado.errores.join('\n'), /"campo_que_no_existe" no existe/);
   });
 
+  test('acepta "tipo_grafico" barra/linea/torta y rechaza cualquier otro valor', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => fieldsGetFalso(['name', 'partner_id', 'amount_total']));
+    for (const tipo of ['barra', 'linea', 'torta']) {
+      const resultado = await validateDefinition({
+        modelo: 'sale.order',
+        campos: [{ campo: 'name' }],
+        grafico: { agrupar_por: 'partner_id', medir: 'amount_total', tipo_grafico: tipo },
+      });
+      assert.equal(resultado.valido, true, `"${tipo}" debería ser válido`);
+    }
+    const resultado = await validateDefinition({
+      modelo: 'sale.order',
+      campos: [{ campo: 'name' }],
+      grafico: { agrupar_por: 'partner_id', medir: 'amount_total', tipo_grafico: 'pastel' },
+    });
+    assert.equal(resultado.valido, false);
+    assert.match(resultado.errores.join('\n'), /"tipo_grafico" debe ser uno de/);
+  });
+
   test('el tipo especial "ventas_mensual" se valida contra sale.order y sale.order.line, no requiere "campos"', async (t) => {
     t.mock.method(odooClient, 'executeKw', async (modelo) => {
       if (modelo === 'sale.order') {

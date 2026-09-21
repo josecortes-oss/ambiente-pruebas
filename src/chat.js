@@ -165,6 +165,7 @@ Edición de tableros genéricos:
 - agregar campo <campo> a <id>
 - quitar campo <campo> de <id>
 - agregar grafico a <id>: agrupar por <campo> midiendo <campo>
+- cambiar tipo de grafico a <barra|linea|torta> en <id>
 - eliminar tablero <id>
 (Los tableros "ventas" y "compras" son de tipo especial y no se pueden editar por chat.)
 
@@ -455,6 +456,23 @@ const COMANDOS = [
       const resultado = await guardarSiValido(id, def);
       if (resultado.ok) tableroModificado.id = id;
       return resultado.ok ? `Gráfico agregado a "${id}". Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
+    },
+  },
+  {
+    patron: /^cambiar tipo de grafico a (barra|linea|torta) en ([\w-]+)$/,
+    accion: async ([, tipoBruto, idBruto], { tableroModificado }) => {
+      const tipo = tipoBruto.toLowerCase();
+      const id = idBruto.toLowerCase();
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'editar');
+      const def = cargarTablero(id);
+      if (!def) return `No existe el tablero "${id}".`;
+      if (!def.grafico) {
+        return `El tablero "${id}" no tiene un bloque "grafico" para cambiarle el tipo. Usa "agregar grafico a ${id}: agrupar por <campo> midiendo <campo>" primero.`;
+      }
+      def.grafico.tipo_grafico = tipo;
+      const resultado = await guardarSiValido(id, def);
+      if (resultado.ok) tableroModificado.id = id;
+      return resultado.ok ? `Tipo de gráfico de "${id}" cambiado a "${tipo}". Versión ${resultado.numeroVersion} guardada.` : resultado.mensaje;
     },
   },
   {
