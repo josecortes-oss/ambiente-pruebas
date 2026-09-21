@@ -334,6 +334,62 @@ describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
     assert.match(r.respuesta, /capa semántica es válida/);
   });
 
+  test('"consultar <medida> por <dimension>" ejecuta read_group real en Odoo y muestra el resultado, sin crear nada', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args, kwargs) => {
+      assert.equal(modelo, 'sale.order');
+      assert.equal(metodo, 'read_group');
+      assert.deepEqual(args, [[], ['amount_total'], ['user_id']]);
+      assert.equal(kwargs.orderby, 'amount_total desc');
+      return [
+        { user_id: [5, 'Vendedor Test'], amount_total: 900 },
+        { user_id: [6, 'Otro Vendedor'], amount_total: 300 },
+      ];
+    });
+    const r = await responderChat('consultar ventas_totales por vendedor');
+    assert.match(r.respuesta, /Ventas totales por Vendedor \(datos en vivo de Odoo\)/);
+    assert.match(r.respuesta, /1\. Vendedor Test: 900/);
+    assert.match(r.respuesta, /2\. Otro Vendedor: 300/);
+    assert.equal(r.tableroModificado, null);
+  });
+
+  test('"consultar" sugiere el concepto parecido cuando el nombre está mal escrito', async () => {
+    const r = await responderChat('consultar ventas_totale por vendedor');
+    assert.match(r.respuesta, /"ventas_totale" no existe — ¿quisiste decir "ventas_totales"\?/);
+  });
+
+  test('"consultar" avisa si se invierten medida y dimensión', async () => {
+    const r = await responderChat('consultar vendedor por ventas_totales');
+    assert.match(r.respuesta, /"vendedor" es una dimensión, no una medida/);
+  });
+
+  test('"consultar" rechaza combinar conceptos de modelos distintos', async () => {
+    const r = await responderChat('consultar ventas_totales por proveedor');
+    assert.match(r.respuesta, /son de modelos distintos/);
+  });
+
+  test('"consultar" aplica el dominio propio de la medida (valor_esperado: solo oportunidades abiertas)', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async (modelo, metodo, args) => {
+      assert.equal(modelo, 'crm.lead');
+      assert.deepEqual(args[0], [['type', '=', 'opportunity'], ['active', '=', true]]);
+      return [{ stage_id: [1, 'New'], expected_revenue: 5000 }];
+    });
+    const r = await responderChat('consultar valor_esperado por etapa_oportunidad');
+    assert.match(r.respuesta, /Valor esperado por Etapa/);
+    assert.match(r.respuesta, /1\. New: 5\.000/);
+  });
+
+  test('"consultar" devuelve un mensaje claro si la consulta a Odoo falla', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => { throw new Error('boom'); });
+    const r = await responderChat('consultar ventas_totales por vendedor');
+    assert.match(r.respuesta, /No se pudo consultar "sale.order"/);
+  });
+
+  test('"consultar" sin resultados responde con un mensaje claro en vez de una lista vacía', async (t) => {
+    t.mock.method(odooClient, 'executeKw', async () => []);
+    const r = await responderChat('consultar ventas_totales por vendedor');
+    assert.match(r.respuesta, /Sin datos para "Ventas totales" por "Vendedor"/);
+  });
+
   test('"sugerir tablero de <modulo>" muestra una vista previa en YAML sin guardar nada', async () => {
     const r = await responderChat('sugerir tablero de crm');
     assert.match(r.respuesta, /Sugerencia para "crm"/);

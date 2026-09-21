@@ -4,7 +4,7 @@ const yaml = require('js-yaml');
 const odooClient = require('./odoo-client');
 const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
 const { obtenerDatosVentasMensuales } = require('./ventas-mensual');
-const { PERIODOS } = require('./agregaciones');
+const { PERIODOS, agrupadoAEntradas } = require('./agregaciones');
 const consultasModulos = require('./consultas-modulos');
 const semantica = require('./semantica');
 const versiones = require('./versiones');
@@ -50,11 +50,16 @@ function etiquetaPeriodo(clave) {
   return (PERIODOS.find((p) => p.clave === clave) || {}).etiqueta || clave;
 }
 
-function formatearEntradas(grafico) {
-  if (!grafico.entradas.length) return 'Sin datos para ese período.';
-  return grafico.entradas
+function formatearListaEntradas(entradas) {
+  if (!entradas.length) return 'Sin datos.';
+  return entradas
     .map(([etiqueta, valor], i) => `${i + 1}. ${etiqueta}: ${valor.toLocaleString('es-CL', { maximumFractionDigits: 2 })}`)
     .join('\n');
+}
+
+function formatearEntradas(grafico) {
+  if (!grafico.entradas.length) return 'Sin datos para ese período.';
+  return formatearListaEntradas(grafico.entradas);
 }
 
 function formatearConcepto(c) {
@@ -157,6 +162,7 @@ Capa semántica (conceptos de negocio -> modelo/campo real, semantica/conceptos.
 - conceptos                                       (lista todos, agrupados por módulo)
 - conceptos de <modulo>                           (ventas | compras | crm | financiero | inventario | produccion)
 - validar conceptos                               (confirma contra Odoo que cada modelo/campo sigue existiendo)
+- consultar <medida> por <dimension>              (ejecuta la consulta real en Odoo y muestra el resultado; no crea ni guarda ningún tablero)
 - sugerir tablero de <modulo>[ con <concepto1>,<concepto2>,...]   (propone un tablero, no lo guarda)
 - crear tablero <id> de <modulo>[ con <concepto1>,<concepto2>,...] (lo crea usando los conceptos; sin "con" usa la sugerencia por defecto)
 
@@ -345,6 +351,50 @@ const COMANDOS = [
       return valido
         ? 'La capa semántica es válida: todos los conceptos apuntan a modelos/campos que existen en Odoo.'
         : `La capa semántica tiene errores:\n${errores.join('\n')}`;
+    },
+  },
+  {
+    // El chat como intérprete: resuelve dos conceptos contra la capa
+    // semántica y consulta Odoo en el momento (read_group, igual que "top
+    // clientes"/"pipeline crm") para mostrar el resultado real — no crea
+    // ni guarda ningún tablero, es solo lectura.
+    patron: /^consultar (\w+) por (\w+)$/,
+    accion: async ([, medidaBruta, dimensionBruta]) => {
+      const nombreMedida = medidaBruta.toLowerCase();
+      const nombreDimension = dimensionBruta.toLowerCase();
+      const medida = semantica.resolverConcepto(nombreMedida);
+      const dimension = semantica.resolverConcepto(nombreDimension);
+      if (!medida || !dimension) {
+        const pistas = [];
+        if (!medida) {
+          const parecido = semantica.sugerirConceptoParecido(nombreMedida);
+          pistas.push(`"${nombreMedida}" no existe` + (parecido ? ` — ¿quisiste decir "${parecido}"?` : ''));
+        }
+        if (!dimension) {
+          const parecido = semantica.sugerirConceptoParecido(nombreDimension);
+          pistas.push(`"${nombreDimension}" no existe` + (parecido ? ` — ¿quisiste decir "${parecido}"?` : ''));
+        }
+        return `${pistas.join('\n')}\nUsa "conceptos" para ver los disponibles.`;
+      }
+      if (medida.tipo !== 'medida') return `"${nombreMedida}" es una dimensión, no una medida. Usa: consultar <medida> por <dimension>.`;
+      if (dimension.tipo !== 'dimension') return `"${nombreDimension}" es una medida, no una dimensión. Usa: consultar <medida> por <dimension>.`;
+      if (medida.modelo !== dimension.modelo) {
+        return `"${nombreMedida}" (${medida.modelo}) y "${nombreDimension}" (${dimension.modelo}) son de modelos distintos; no se pueden consultar juntos.`;
+      }
+
+      let grupos;
+      try {
+        grupos = await odooClient.executeKw(medida.modelo, 'read_group', [medida.dominio || [], [medida.campo], [dimension.campo]], {
+          orderby: `${medida.campo} desc`,
+          limit: 20,
+        });
+      } catch (err) {
+        return `No se pudo consultar "${medida.modelo}" en Odoo: ${err.message || err}`;
+      }
+
+      const { entradas } = agrupadoAEntradas(grupos, dimension.campo, medida.campo, 15);
+      if (!entradas.length) return `Sin datos para "${medida.etiqueta}" por "${dimension.etiqueta}".`;
+      return `${medida.etiqueta} por ${dimension.etiqueta} (datos en vivo de Odoo):\n${formatearListaEntradas(entradas)}`;
     },
   },
   {

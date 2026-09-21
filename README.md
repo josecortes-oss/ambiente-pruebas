@@ -250,17 +250,27 @@ a la base de datos.
 
     El chat actúa como un agente simple sobre esta capa (determinista, sin
     IA — ver punto 7): **lee** (`conceptos`, `conceptos de <modulo>`),
-    **sugiere** (`sugerir tablero de <modulo>[ con <conceptos>]`, muestra el
-    YAML propuesto sin guardar nada) y **crea** (`crear tablero <id> de
-    <modulo>[ con <conceptos>]`) tableros combinando conceptos. Sin `con`,
-    usa `sugerirConceptosPorDefecto` (hasta 2 dimensiones + 1 medida del
-    modelo con más conceptos en ese módulo, para no mezclar, por ejemplo,
-    conceptos de cabecera de venta con conceptos de línea de venta). El
-    tablero que resulta es un tablero genérico normal (mismo formato que
-    cualquier YAML de `tableros/`) y pasa por `guardarSiValido`/
-    `validateDefinition` igual que `crear tablero <id>: modelo ...` — la
-    capa semántica solo evita escribir modelo/campo a mano, no se salta
-    ninguna validación.
+    **interpreta y consulta** (`consultar <medida> por <dimension>`: resuelve
+    los dos nombres contra la capa semántica, ejecuta `read_group` contra
+    Odoo en el momento con el mismo dominio de la medida — ej. `valor_esperado`
+    solo cuenta oportunidades abiertas — y devuelve el resultado real; no crea
+    ni guarda ningún tablero, es solo lectura), **sugiere** (`sugerir tablero
+    de <modulo>[ con <conceptos>]`, muestra el YAML propuesto sin guardar
+    nada) y **crea** (`crear tablero <id> de <modulo>[ con <conceptos>]`)
+    tableros combinando conceptos. Sin `con`, usa `sugerirConceptosPorDefecto`
+    (hasta 2 dimensiones + 1 medida del modelo con más conceptos en ese
+    módulo, para no mezclar, por ejemplo, conceptos de cabecera de venta con
+    conceptos de línea de venta). El tablero que resulta de "crear" es un
+    tablero genérico normal (mismo formato que cualquier YAML de
+    `tableros/`) y pasa por `guardarSiValido`/`validateDefinition` igual que
+    `crear tablero <id>: modelo ...` — la capa semántica solo evita escribir
+    modelo/campo a mano, no se salta ninguna validación.
+
+    `consultar <medida> por <dimension>` y `sugerir/crear tablero ... con
+    <conceptos>` comparten la misma lógica de "sugerir mejoras": si un
+    nombre de concepto no existe, `sugerirConceptoParecido` (distancia de
+    edición, `src/semantica.js`) propone el más parecido — "¿quisiste decir
+    ...?" — antes de rendirse con "no reconozco ese comando".
 
     Toda solicitud de "sugerir"/"crear tablero ... con <conceptos>" pasa
     siempre por esta capa para interpretarse — nunca arma la definición del
@@ -379,7 +389,13 @@ quedar completamente aislados de la red.
   (`conceptos`, `sugerir tablero de <modulo>`, `crear tablero <id> de
   <modulo>[ con <conceptos>]`) — incluido que mezclar conceptos de cabecera
   y de línea se rechace antes de tocar Odoo, y que "ventas"/"compras" sigan
-  protegidos aunque se use esta sintaxis nueva; y el versionador (`versiones
+  protegidos aunque se use esta sintaxis nueva; `consultar <medida> por
+  <dimension>` — que llame a `read_group` con el modelo/dominio/campos
+  correctos y muestre el resultado real (mockeado), que aplique el dominio
+  propio de la medida (`valor_esperado` → solo oportunidades abiertas), que
+  sugiera el concepto parecido ante un nombre mal escrito, que rechace medida
+  y dimensión invertidas o de modelos distintos, y que un error de Odoo o una
+  respuesta vacía den un mensaje claro en vez de reventar; y el versionador (`versiones
   de <id>`, `ver version <n> de <id>`, `restaurar version <n> de <id>`,
   `eliminar versiones de <id>`) — que cada guardado exitoso agregue una
   versión nueva, que restaurar deje esa versión como la actual y además
