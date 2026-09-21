@@ -1,0 +1,137 @@
+<%- include('layout-head', { titulo: def.titulo || def._id }) %>
+<%- include('topbar', { tabs, activoId, esAdmin, invalidos, cambioPendiente }) %>
+<div class="shell" id="shell">
+  <%- include('chat-panel') %>
+
+  <section class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="status-cluster">
+        <span class="status-dot"></span>
+        <span class="status-copy"><strong>Tablero: <%= def.titulo || def._id %></strong><span>purchase.order + purchase.order.line</span></span>
+      </div>
+      <span class="autosave">✓ Evaluación semántica validada</span>
+    </div>
+
+    <div class="canvas-scroll">
+      <div class="dashboard">
+        <div class="dashboard-head">
+          <div><h2><%= def.titulo || def._id %></h2><p><%= filas.length %> órdenes en el período seleccionado</p></div>
+          <span class="trust-note">◈ Capa semántica validada · fields_get sobre purchase.order</span>
+        </div>
+
+        <form method="GET" action="/tableros/<%= def._id %>" class="barra-filtros">
+          <div class="campo-filtro">
+            <label for="periodo">Período</label>
+            <select id="periodo" name="periodo">
+              <% periodos.forEach((p) => { %>
+                <option value="<%= p.clave %>" <%= filtros.periodo === p.clave ? 'selected' : '' %>><%= p.etiqueta %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="campo-filtro">
+            <label for="empresa">Empresa</label>
+            <select id="empresa" name="empresa">
+              <option value="">Todas</option>
+              <% empresas.forEach((e) => { %>
+                <option value="<%= e.id %>" <%= filtros.empresaId === e.id ? 'selected' : '' %>><%= e.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="campo-filtro">
+            <label for="proveedor">Proveedor</label>
+            <select id="proveedor" name="proveedor">
+              <option value="">Todos</option>
+              <% proveedores.forEach((p) => { %>
+                <option value="<%= p.id %>" <%= filtros.proveedorId === p.id ? 'selected' : '' %>><%= p.nombre %></option>
+              <% }) %>
+            </select>
+          </div>
+          <button type="submit">Aplicar</button>
+        </form>
+
+        <div class="kpi-row">
+          <div class="kpi">
+            <div class="kpi-top"><span class="kpi-label">Total comprado</span><span class="kpi-icon">$</span></div>
+            <div class="kpi-value"><%= kpis.total.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></div>
+            <div class="kpi-foot"><span class="positive"><%= kpis.cantidad %> órdenes</span> en el período</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-top"><span class="kpi-label">Ticket promedio</span><span class="kpi-icon">≈</span></div>
+            <div class="kpi-value"><%= kpis.ticketPromedio.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></div>
+            <div class="kpi-foot">por orden</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-top"><span class="kpi-label">Mejor proveedor</span><span class="kpi-icon">★</span></div>
+            <div class="kpi-value"><%= kpis.mejorProveedor ? kpis.mejorProveedor.nombre : '—' %></div>
+            <div class="kpi-foot"><% if (kpis.mejorProveedor) { %><span class="positive"><%= kpis.mejorProveedor.valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span> comprado<% } else { %>sin datos<% } %></div>
+          </div>
+        </div>
+
+        <div class="cards-row">
+          <div class="card">
+            <div class="card-head"><h3><%= graficoProductos.titulo %></h3><p>purchase.order.line · price_subtotal</p></div>
+            <div class="bars">
+              <% if (graficoProductos.entradas.length === 0) { %><p style="padding:0 16px 16px;color:var(--muted);font-size:12px">Sin datos para este filtro.</p><% } %>
+              <% graficoProductos.entradas.forEach(([etiqueta, valor]) => { %>
+                <div class="bar-row">
+                  <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
+                  <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / graficoProductos.max) * 100) %>%"></div></div>
+                  <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+
+          <div class="card selectable"
+            data-tipo="Bar chart · purchase.order"
+            data-titulo="<%= graficoProveedores.titulo %>"
+            data-metrica="amount_total (suma)"
+            data-dimension="partner_id — Proveedor"
+            data-dimension-campo="partner_id"
+            data-modelo="purchase.order"
+            data-definido-en="src/compras-mensual.js (tipo compras_mensual)">
+            <div class="card-head"><h3><%= graficoProveedores.titulo %></h3><p>Click para ver el contexto semántico</p></div>
+            <div class="bars">
+              <% if (graficoProveedores.entradas.length === 0) { %><p style="padding:0 16px 16px;color:var(--muted);font-size:12px">Sin datos para este filtro.</p><% } %>
+              <% graficoProveedores.entradas.forEach(([etiqueta, valor]) => { %>
+                <div class="bar-row">
+                  <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
+                  <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / graficoProveedores.max) * 100) %>%"></div></div>
+                  <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div class="card-head"><h3>Detalle de órdenes</h3><p><%= filas.length %> registros</p></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Orden</th><th>Proveedor</th><th>Fecha</th><th>Total</th><th>Estado</th></tr></thead>
+              <tbody>
+                <% filas.forEach((f) => { %>
+                  <tr>
+                    <td><%= f.name %></td>
+                    <td><%= f.partner_id %></td>
+                    <td><%= f.date_order %></td>
+                    <td><%= f.amount_total %></td>
+                    <td><%= f.state %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="canvas-footer">
+      <span>Datos en vivo de la conexión de servicio a Odoo (purchase.order + purchase.order.line).</span>
+    </footer>
+  </section>
+
+  <%- include('inspector', { cambioPendiente }) %>
+</div>
+</body>
+</html>

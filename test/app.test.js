@@ -6,7 +6,8 @@ const { crearApp } = require('../src/app');
 const CAMPOS_REALES = {
   'sale.order': ['name', 'partner_id', 'user_id', 'company_id', 'date_order', 'amount_total', 'state'],
   'sale.order.line': ['order_id', 'product_id', 'price_subtotal'],
-  'purchase.order': ['name', 'partner_id', 'date_order', 'amount_total', 'state'],
+  'purchase.order': ['name', 'partner_id', 'company_id', 'date_order', 'amount_total', 'state'],
+  'purchase.order.line': ['order_id', 'product_id', 'price_subtotal'],
 };
 
 function fieldsGetFalso(campos) {
@@ -33,6 +34,18 @@ async function mockExecuteKw(modelo, metodo, args) {
   }
   if (modelo === 'sale.order.line' && metodo === 'read_group') {
     return [{ product_id: [1, 'Producto Test'], price_subtotal: 300 }];
+  }
+  if (modelo === 'purchase.order' && metodo === 'read_group') {
+    return [{ partner_id: [20, 'Proveedor Test'], amount_total: 700 }];
+  }
+  if (modelo === 'purchase.order' && metodo === 'search_read') {
+    return [{
+      name: 'P00001', partner_id: [20, 'Proveedor Test'],
+      date_order: '2026-01-01 00:00:00', amount_total: 700, state: 'purchase',
+    }];
+  }
+  if (modelo === 'purchase.order.line' && metodo === 'read_group') {
+    return [{ product_id: [2, 'Insumo Test'], price_subtotal: 400 }];
   }
   throw new Error(`llamada no esperada en el mock: ${modelo}.${metodo}`);
 }
@@ -108,6 +121,27 @@ describe('app (integración de rutas)', () => {
     const html = await workspace.text();
     assert.match(html, /Tablero: Ventas/);
     assert.match(html, /Vendedor Test/);
+  });
+
+  test('el workspace de Compras muestra filtros, KPIs y el gráfico por proveedor', async (t) => {
+    t.mock.method(odooClient, 'authenticate', async () => 2);
+    t.mock.method(odooClient, 'executeKw', mockExecuteKw);
+
+    const login = await fetch(`${baseUrl}/login`, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'login=admin&password=lo-que-sea',
+    });
+    const cookie = cookieDe(login);
+
+    const r = await fetch(`${baseUrl}/tableros/compras`, { headers: { Cookie: cookie } });
+    assert.equal(r.status, 200);
+    const html = await r.text();
+    assert.match(html, /Tablero: Compras/);
+    assert.match(html, /name="proveedor"/);
+    assert.match(html, /Proveedor Test/);
+    assert.match(html, /Insumo Test/);
   });
 
   test('POST /chat/deshacer sin sesión también redirige a /login (no expone el endpoint)', async () => {

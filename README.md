@@ -25,22 +25,24 @@ a la base de datos.
    usuario que inició sesión.
 3. **Tableros como archivos de texto**: cada tablero es un archivo YAML en
    [tableros/](tableros/), editable directamente por el administrador del
-   sistema sin tocar código. Ejemplo (`tableros/compras.yaml`):
+   sistema sin tocar código. Los dos tableros que trae el repo (Ventas,
+   Compras) ya usan el patrón de tipo especial (punto 6), pero un tablero
+   genérico se ve así:
 
    ```yaml
-   titulo: "Órdenes de Compra"
-   modulo: compras
-   modelo: purchase.order
+   titulo: "Facturas"
+   modulo: contabilidad
+   modelo: account.move
    campos:
      - campo: name
-       etiqueta: "Orden"
+       etiqueta: "Factura"
      - campo: amount_total
        etiqueta: "Total"
    dominio: []
-   orden: "date_order desc"
+   orden: "invoice_date desc"
    limite: 80
    grafico:
-     titulo: "Total comprado por proveedor"
+     titulo: "Total facturado por cliente"
      agrupar_por: partner_id
      medir: amount_total
    ```
@@ -67,24 +69,40 @@ a la base de datos.
    para fijar su lugar entre las pestañas del workspace; a igual `posicion` se
    ordenan por nombre de archivo. Sin `posicion`, un tablero queda al final.
    Orden actual: Ventas (1, pestaña inicial — `/tableros` redirige ahí),
-   Órdenes de Compra (2).
+   Compras (2).
 
-6. **Ventas** (`tableros/ventas.yaml`, `tipo: ventas_mensual`): es el único
-   tablero con lógica propia (en `src/ventas-mensual.js`), porque combina dos
-   modelos (`sale.order` y `sale.order.line`) y filtros interactivos que el
-   motor genérico de `campos`/`grafico` no soporta:
-   - **Filtros** (por querystring, recargan la página): período (este mes,
-     mes anterior, este año, año anterior, todo el histórico), empresa
-     (`res.company`) y vendedor (`user_id`). El selector de vendedor siempre
-     lista a todos los vendedores con ventas registradas, sin importar el
-     filtro activo, para poder cambiar de uno a otro sin perder opciones.
-   - **Gráficos**: top 10 productos (`sale.order.line` agrupado por
-     `product_id`, sumando `price_subtotal` vía `read_group`), top clientes y
-     ventas por vendedor (`sale.order` agrupado por `partner_id`/`user_id`,
-     sumando `amount_total`).
-   - Sigue pasando por evaluación semántica: `CAMPOS_POR_TIPO` en
-     `src/tableros.js` declara qué campos de cada modelo usa este tipo, y se
-     verifican con `fields_get` igual que un tablero genérico.
+6. **Tableros de tipo especial** (`src/agregaciones.js` + un módulo por
+   tablero): cuando un tablero necesita combinar dos modelos y filtros
+   interactivos que el motor genérico de `campos`/`grafico` no soporta, sigue
+   este patrón: un `tipo` propio en el YAML, un módulo `src/<tipo>.js` con su
+   lógica, una vista propia, y una entrada en `CAMPOS_POR_TIPO`
+   (`src/tableros.js`) para que la evaluación semántica lo siga cubriendo.
+   `src/agregaciones.js` (`PERIODOS`, `rangoPeriodo`, `agrupadoAEntradas`) es
+   compartido entre ambos: el cálculo de rango de fechas y la agregación
+   "grupos de Odoo → [etiqueta, valor] ordenados" no son específicos de
+   ventas ni de compras.
+
+   - **Ventas** (`tableros/ventas.yaml`, `tipo: ventas_mensual`,
+     `src/ventas-mensual.js`): combina `sale.order` y `sale.order.line`.
+     - **Filtros** (por querystring, recargan la página): período, empresa
+       (`res.company`) y vendedor (`user_id`). El selector de vendedor
+       siempre lista a todos los vendedores con ventas registradas, sin
+       importar el filtro activo, para poder cambiar de uno a otro sin
+       perder opciones.
+     - **Gráficos**: top 10 productos (`sale.order.line` agrupado por
+       `product_id`, sumando `price_subtotal`), top clientes y ventas por
+       vendedor (`sale.order` agrupado por `partner_id`/`user_id`, sumando
+       `amount_total`).
+   - **Compras** (`tableros/compras.yaml`, `tipo: compras_mensual`,
+     `src/compras-mensual.js`): el mismo patrón sobre `purchase.order` y
+     `purchase.order.line`, con **proveedor** (`partner_id`) en vez de
+     vendedor.
+     - **Filtros**: período, empresa y proveedor (mismo criterio: el
+       selector de proveedor siempre lista a todos los proveedores con
+       compras registradas).
+     - **Gráficos**: top 10 productos comprados (`purchase.order.line`
+       agrupado por `product_id`) y total comprado por proveedor
+       (`purchase.order` agrupado por `partner_id`).
 
 7. **Chat del panel principal** (`/tableros`, `src/chat.js` + `src/routes/chat.js`):
    **sin IA** — un parser de comandos de texto fijos (expresiones regulares), sin costo
@@ -99,9 +117,10 @@ a la base de datos.
      `agregar grafico a ...`, `eliminar tablero ...`): modifican el objeto y llaman a
      `guardarSiValido`, que **reutiliza `validateDefinition`** (la misma evaluación
      semántica de los tableros normales) antes de escribir el YAML — si el campo o
-     modelo no existe en Odoo, no se guarda nada y se devuelve el error. El tablero
-     especial "ventas" (`tipo: ventas_mensual`) está excluido de todos los comandos de
-     edición porque su lógica vive en código, no en YAML genérico.
+     modelo no existe en Odoo, no se guarda nada y se devuelve el error. Los tableros
+     especiales "ventas" y "compras" (`TABLEROS_ESPECIALES` en `src/chat.js`) están
+     excluidos de todos los comandos de edición porque su lógica vive en código, no
+     en YAML genérico.
 
    Ver la lista completa de comandos escribiendo `ayuda` en el chat, o en la constante
    `AYUDA` de `src/chat.js`.
@@ -129,10 +148,13 @@ Basta con crear un archivo `.yaml` en `tableros/` con `modelo`, `campos` y,
 opcionalmente, `titulo`, `modulo`, `dominio`, `orden`, `limite`, `grafico` y
 `posicion`. No requiere reiniciar código de negocio: se valida y se lista
 automáticamente. Un tablero con necesidades especiales (varios modelos,
-filtros interactivos) sigue el patrón de `ventas_mensual`: un `tipo` propio,
-lógica dedicada en `src/routes/tableros.js`, y su entrada correspondiente en
-`CAMPOS_POR_TIPO` (`src/tableros.js`) para que la evaluación semántica lo
-cubra igual.
+filtros interactivos) sigue el patrón de `ventas_mensual`/`compras_mensual`:
+un `tipo` propio, un módulo `src/<tipo>.js` (reutilizando `src/agregaciones.js`
+para períodos/agregación), lógica dedicada en `src/routes/tableros.js`, una
+vista propia, y su entrada correspondiente en `CAMPOS_POR_TIPO`
+(`src/tableros.js`) para que la evaluación semántica lo cubra igual. Si ese
+`tipo` no debe editarse por chat, agrégalo también a `TABLEROS_ESPECIALES`
+en `src/chat.js`.
 
 ### Ejecutar
 
@@ -154,23 +176,30 @@ desestructurado) precisamente para que los tests puedan reemplazar
 `odooClient.executeKw`/`odooClient.authenticate` con `t.mock.method(...)` y
 quedar completamente aislados de la red.
 
-- **`test/ventas-mensual.test.js`**: `rangoPeriodo` — invariantes de cada
-  período (p. ej. `mes_anterior` termina justo donde empieza `este_mes`),
-  sin necesidad de fijar la fecha del sistema.
+- **`test/agregaciones.test.js`**: `rangoPeriodo` — invariantes de cada período
+  (p. ej. `mes_anterior` termina justo donde empieza `este_mes`), sin
+  necesidad de fijar la fecha del sistema; y `agrupadoAEntradas` — conversión
+  de grupos de Odoo a `[etiqueta, valor]` ordenados, etiqueta "Sin asignar" y
+  límite de entradas.
 - **`test/tableros.test.js`**: `validateDefinition` — la evaluación semántica
   en sí: modelo/campo faltante o inexistente, campos usados en `dominio` o en
-  `grafico`, y el tipo especial `ventas_mensual` contra `CAMPOS_POR_TIPO`.
+  `grafico`, y los tipos especiales `ventas_mensual`/`compras_mensual` contra
+  `CAMPOS_POR_TIPO`.
+- **`test/compras-mensual.test.js`**: `obtenerDatosCompras` — que el dominio
+  de `purchase.order`/`purchase.order.line` incluya el proveedor filtrado, y
+  que las agregaciones (top proveedores, top productos) salgan correctas.
 - **`test/chat.test.js`**: `responderChat` — comandos de consulta (incluida
   la regresión del bug de normalización que rompía `sale.order` → `saleorder`),
   y el ciclo completo de edición: crear/agregar/quitar campo, la protección
-  del tablero "ventas", y que `deshacerUltimoCambio` de verdad borre un
-  tablero recién creado y restaure el YAML anterior en una edición. Escribe
-  archivos reales bajo `tableros/` con un id de prueba (`test_tmp_chat`) y
-  los limpia siempre en un hook `after`.
+  de los tableros "ventas" y "compras", y que `deshacerUltimoCambio` de verdad
+  borre un tablero recién creado y restaure el YAML anterior en una edición.
+  Escribe archivos reales bajo `tableros/` con un id de prueba
+  (`test_tmp_chat`) y los limpia siempre en un hook `after`.
 - **`test/app.test.js`**: integración de rutas sobre `src/app.js` (la app de
   Express separada de `app.listen`, ver `src/index.js`) — sesión requerida en
   rutas protegidas, login inválido/válido, y que `/tableros` redirige al
-  primer tablero válido con datos reales de la página renderizada.
+  primer tablero válido con datos reales de la página renderizada (Ventas y
+  Compras).
 
 Variables de entorno usadas (`ambiente-pruebas.env`, no se sube al repo):
 `ODOO_URL`, `ODOO_DB`, `ODOO_LOGIN`, `ODOO_API_KEY` (conexión de servicio a

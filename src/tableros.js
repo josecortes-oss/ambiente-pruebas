@@ -72,6 +72,10 @@ const CAMPOS_POR_TIPO = {
     'sale.order': ['name', 'partner_id', 'user_id', 'company_id', 'date_order', 'amount_total', 'state'],
     'sale.order.line': ['order_id', 'product_id', 'price_subtotal'],
   },
+  compras_mensual: {
+    'purchase.order': ['name', 'partner_id', 'company_id', 'date_order', 'amount_total', 'state'],
+    'purchase.order.line': ['order_id', 'product_id', 'price_subtotal'],
+  },
 };
 
 /**

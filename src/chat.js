@@ -3,9 +3,17 @@ const path = require('path');
 const yaml = require('js-yaml');
 const odooClient = require('./odoo-client');
 const { loadValidatedDefinitions, validateDefinition } = require('./tableros');
-const { obtenerDatosVentasMensuales, PERIODOS } = require('./ventas-mensual');
+const { obtenerDatosVentasMensuales } = require('./ventas-mensual');
+const { PERIODOS } = require('./agregaciones');
 
 const TABLEROS_DIR = path.join(__dirname, '..', 'tableros');
+
+// Tableros de tipo especial: su lógica vive en código (src/*-mensual.js), no
+// en YAML genérico, así que el chat nunca los crea/edita/elimina.
+const TABLEROS_ESPECIALES = new Set(['ventas', 'compras']);
+function mensajeTableroEspecial(id, accion) {
+  return `El tablero "${id}" es de tipo especial y no se puede ${accion} por chat.`;
+}
 
 const MAPA_ACENTOS = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ñ: 'n', Á: 'A', É: 'E', Í: 'I', Ó: 'O', Ú: 'U', Ñ: 'N' };
 // No pasa a minúsculas: hay que preservar mayúsculas en texto libre (títulos,
@@ -106,7 +114,7 @@ const AYUDA = `Comandos disponibles:
 - quitar campo <campo> de <id>
 - agregar grafico a <id>: agrupar por <campo> midiendo <campo>
 - eliminar tablero <id>
-(El tablero "ventas" es de tipo especial y no se puede editar por chat.)`;
+(Los tableros "ventas" y "compras" son de tipo especial y no se pueden editar por chat.)`;
 
 const COMANDOS = [
   {
@@ -174,7 +182,7 @@ const COMANDOS = [
     accion: async ([, idBruto, modeloBruto, camposTexto, titulo], { tableroModificado }) => {
       const id = idBruto.toLowerCase();
       const modelo = modeloBruto.toLowerCase();
-      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede crear/reemplazar por chat.';
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'crear/reemplazar');
       const campos = camposTexto.split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
       const def = {
         titulo: titulo || id,
@@ -194,7 +202,7 @@ const COMANDOS = [
     accion: async ([, campoBruto, idBruto], { tableroModificado }) => {
       const campo = campoBruto.toLowerCase();
       const id = idBruto.toLowerCase();
-      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'editar');
       const def = cargarTablero(id);
       if (!def) return `No existe el tablero "${id}".`;
       def.campos = def.campos || [];
@@ -212,7 +220,7 @@ const COMANDOS = [
     accion: async ([, campoBruto, idBruto], { tableroModificado }) => {
       const campo = campoBruto.toLowerCase();
       const id = idBruto.toLowerCase();
-      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'editar');
       const def = cargarTablero(id);
       if (!def) return `No existe el tablero "${id}".`;
       const antes = (def.campos || []).length;
@@ -230,7 +238,7 @@ const COMANDOS = [
       const id = idBruto.toLowerCase();
       const agruparPor = agruparPorBruto.toLowerCase();
       const medir = medirBruto.toLowerCase();
-      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede editar por chat.';
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'editar');
       const def = cargarTablero(id);
       if (!def) return `No existe el tablero "${id}".`;
       def.grafico = { titulo: `${medir} por ${agruparPor}`, agrupar_por: agruparPor, medir };
@@ -243,7 +251,7 @@ const COMANDOS = [
     patron: /^eliminar tablero ([\w-]+)$/,
     accion: async ([, idBruto], { tableroModificado }) => {
       const id = idBruto.toLowerCase();
-      if (id === 'ventas') return 'El tablero "ventas" es de tipo especial y no se puede eliminar por chat.';
+      if (TABLEROS_ESPECIALES.has(id)) return mensajeTableroEspecial(id, 'eliminar');
       const archivo = path.join(TABLEROS_DIR, `${id}.yaml`);
       if (!fs.existsSync(archivo)) return `No existe el tablero "${id}".`;
       const contenidoAnterior = fs.readFileSync(archivo, 'utf8');

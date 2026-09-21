@@ -2,7 +2,9 @@ const express = require('express');
 const { requireAuth } = require('./auth');
 const { loadValidatedDefinitions, getValidatedDefinition } = require('../tableros');
 const odooClient = require('../odoo-client');
-const { PERIODOS, obtenerDatosVentasMensuales } = require('../ventas-mensual');
+const { PERIODOS } = require('../agregaciones');
+const { obtenerDatosVentasMensuales } = require('../ventas-mensual');
+const { obtenerDatosCompras } = require('../compras-mensual');
 const { obtenerUltimoCambio } = require('../chat');
 
 const router = express.Router();
@@ -82,6 +84,43 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         vendedores: datos.vendedores,
         graficoClientes: datos.graficoClientes,
         graficoVendedores: datos.graficoVendedores,
+        graficoProductos: datos.graficoProductos,
+        filas: filasFormateadas,
+        kpis,
+      });
+    }
+
+    if (def.tipo === 'compras_mensual') {
+      const periodo = req.query.periodo || 'este_mes';
+      const empresaId = req.query.empresa ? Number(req.query.empresa) : null;
+      const proveedorId = req.query.proveedor ? Number(req.query.proveedor) : null;
+      const datos = await obtenerDatosCompras({ periodo, empresaId, proveedorId });
+
+      const filasFormateadas = datos.filas.map((fila) => ({
+        name: fila.name,
+        partner_id: fila.partner_id ? fila.partner_id[1] : '',
+        date_order: fila.date_order,
+        amount_total: fila.amount_total,
+        state: fila.state,
+      }));
+
+      const total = datos.filas.reduce((acc, f) => acc + (f.amount_total || 0), 0);
+      const mejorProveedor = datos.graficoProveedores.entradas[0];
+      const kpis = {
+        total,
+        cantidad: datos.filas.length,
+        ticketPromedio: datos.filas.length ? total / datos.filas.length : 0,
+        mejorProveedor: mejorProveedor ? { nombre: mejorProveedor[0], valor: mejorProveedor[1] } : null,
+      };
+
+      return res.render('compras-mensual', {
+        ...topbar,
+        def,
+        periodos: PERIODOS,
+        filtros: { periodo, empresaId, proveedorId },
+        empresas: datos.empresas,
+        proveedores: datos.proveedores,
+        graficoProveedores: datos.graficoProveedores,
         graficoProductos: datos.graficoProductos,
         filas: filasFormateadas,
         kpis,

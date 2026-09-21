@@ -14,7 +14,8 @@ const ARCHIVO_PRUEBA = path.join(TABLEROS_DIR, `${ID_PRUEBA}.yaml`);
 const CAMPOS_REALES = {
   'sale.order': ['name', 'partner_id', 'user_id', 'company_id', 'date_order', 'amount_total', 'state'],
   'sale.order.line': ['order_id', 'product_id', 'price_subtotal'],
-  'purchase.order': ['name', 'partner_id', 'date_order', 'amount_total', 'state'],
+  'purchase.order': ['name', 'partner_id', 'company_id', 'date_order', 'amount_total', 'state'],
+  'purchase.order.line': ['order_id', 'product_id', 'price_subtotal'],
 };
 
 function fieldsGetFalso(campos) {
@@ -165,13 +166,18 @@ describe('responderChat — edición de tableros (con evaluación semántica)', 
     limpiarArchivoPrueba();
   });
 
-  test('el tablero especial "ventas" está protegido de todos los comandos de edición', async () => {
+  test('los tableros especiales "ventas" y "compras" están protegidos de todos los comandos de edición', async () => {
     const comandos = [
       'agregar campo email a ventas',
       'quitar campo email de ventas',
       'agregar grafico a ventas: agrupar por partner_id midiendo amount_total',
       'eliminar tablero ventas',
       'crear tablero ventas: modelo sale.order, campos name',
+      'agregar campo email a compras',
+      'quitar campo email de compras',
+      'agregar grafico a compras: agrupar por partner_id midiendo amount_total',
+      'eliminar tablero compras',
+      'crear tablero compras: modelo purchase.order, campos name',
     ];
     for (const comando of comandos) {
       const r = await responderChat(comando);

@@ -1,6 +1,6 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { rangoPeriodo, PERIODOS } = require('../src/ventas-mensual');
+const { rangoPeriodo, PERIODOS } = require('../src/agregaciones');
 
 function aFecha(str) {
   // "YYYY-MM-DD HH:mm:ss" -> Date, para comparar límites de rango.
@@ -50,5 +50,34 @@ describe('rangoPeriodo', () => {
       assert.ok(Array.isArray(rango) && rango.length === 2, `"${clave}" debería devolver [inicio, fin]`);
       assert.ok(aFecha(rango[0]) < aFecha(rango[1]), `"${clave}": inicio debe ser anterior a fin`);
     }
+  });
+});
+
+describe('agrupadoAEntradas', () => {
+  const { agrupadoAEntradas } = require('../src/agregaciones');
+
+  test('convierte grupos de Odoo (many2one [id, nombre]) en pares [etiqueta, valor], ordenados de mayor a menor', () => {
+    const grupos = [
+      { partner_id: [1, 'Cliente A'], amount_total: 100 },
+      { partner_id: [2, 'Cliente B'], amount_total: 500 },
+    ];
+    const { entradas, max } = agrupadoAEntradas(grupos, 'partner_id', 'amount_total', 10);
+    assert.deepEqual(entradas, [['Cliente B', 500], ['Cliente A', 100]]);
+    assert.equal(max, 500);
+  });
+
+  test('descarta grupos sin dimensión asignada (false) bajo la etiqueta "Sin asignar" y filtra valores en cero', () => {
+    const grupos = [
+      { partner_id: false, amount_total: 50 },
+      { partner_id: [3, 'Cliente C'], amount_total: 0 },
+    ];
+    const { entradas } = agrupadoAEntradas(grupos, 'partner_id', 'amount_total', 10);
+    assert.deepEqual(entradas, [['Sin asignar', 50]]);
+  });
+
+  test('respeta el límite de entradas devueltas', () => {
+    const grupos = Array.from({ length: 5 }, (_, i) => ({ partner_id: [i, `Cliente ${i}`], amount_total: i + 1 }));
+    const { entradas } = agrupadoAEntradas(grupos, 'partner_id', 'amount_total', 2);
+    assert.equal(entradas.length, 2);
   });
 });

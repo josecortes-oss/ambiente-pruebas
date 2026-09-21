@@ -1,22 +1,8 @@
-titulo: "Órdenes de Compra"
+# Tablero de tipo especial: su lógica vive en src/compras-mensual.js y
+# src/routes/tableros.js (filtros + varios gráficos + dos modelos), no en el
+# motor genérico de "campos"/"grafico". Aun así pasa por evaluación semántica:
+# ver CAMPOS_POR_TIPO en src/tableros.js.
+titulo: "Compras"
 modulo: compras
-modelo: purchase.order
+tipo: compras_mensual
 posicion: 2
-campos:
-  - campo: name
-    etiqueta: "Orden"
-  - campo: partner_id
-    etiqueta: "Proveedor"
-  - campo: date_order
-    etiqueta: "Fecha"
-  - campo: amount_total
-    etiqueta: "Total"
-  - campo: state
-    etiqueta: "Estado"
-dominio: []
-orden: "date_order desc"
-limite: 80
-grafico:
-  titulo: "Total comprado por proveedor"
-  agrupar_por: partner_id
-  medir: amount_total
