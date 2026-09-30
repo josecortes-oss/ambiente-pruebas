@@ -1,0 +1,60 @@
+<%- include('layout-head', { titulo: 'Vista previa: ' + (def.titulo || modulo) }) %>
+<%- include('topbar', { tabs, activoId, esAdmin, invalidos, cambioPendiente }) %>
+<div class="shell" id="shell">
+  <%- include('chat-panel') %>
+
+  <section class="canvas-area">
+    <div class="canvas-toolbar">
+      <div class="status-cluster">
+        <span class="status-dot"></span>
+        <span class="status-copy"><strong>Vista previa: <%= def.titulo %></strong><span><%= def.modelo %></span></span>
+      </div>
+      <span class="autosave" style="color:#8a5a0d;background:#fff4dd;">◇ Vista previa — no guardado</span>
+    </div>
+
+    <div class="canvas-scroll">
+      <div class="dashboard">
+        <div class="dashboard-head">
+          <div><h2><%= def.titulo %></h2><p><%= def.modelo %> · <%= totalRegistros %> registros · datos en vivo de Odoo</p></div>
+          <span class="trust-note">◈ Vista previa a partir de la capa semántica (<%= conceptos.join(', ') %>)</span>
+        </div>
+
+        <div class="card" style="margin-bottom:12px;padding:14px 16px;background:#fff4dd;border-color:#f0d59f;">
+          Esto es una vista previa: nada se guardó. Para crear el tablero de verdad, escribe en el chat
+          <code>crear tablero &lt;id&gt; de <%= modulo %> con <%= conceptos.join(',') %></code>.
+        </div>
+
+        <% if (grafico) { %>
+          <div class="cards-row">
+            <div class="card">
+              <div class="card-head"><h3><%= grafico.titulo %></h3><p><%= def.modelo %></p></div>
+              <%- include('grafico-cuerpo', { grafico, tipo: 'barra' }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <div class="card table-card">
+          <div class="card-head"><h3>Detalle</h3><p><%= totalRegistros %> registros</p></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><% columnas.forEach((c) => { %><th><%= c.etiqueta %></th><% }) %></tr></thead>
+              <tbody>
+                <% filas.forEach((fila) => { %>
+                  <tr><% columnas.forEach((c) => { %><td><%= fila[c.campo] %></td><% }) %></tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="canvas-footer">
+      <span>Datos en vivo de la conexión de servicio a Odoo (<%= def.modelo %>) · vista previa, no persistida.</span>
+    </footer>
+  </section>
+
+  <%- include('inspector', { cambioPendiente, activoId }) %>
+</div>
+</body>
+</html>

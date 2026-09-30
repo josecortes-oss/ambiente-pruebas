@@ -398,8 +398,14 @@ const COMANDOS = [
     },
   },
   {
+    // A diferencia de "consultar X por Y" (una sola medida/dimensión, sin
+    // tablero de por medio), esto arma la misma definición que "crear
+    // tablero" usaría y la manda a /tableros/vista-previa para que el
+    // panel central la muestre igual que un tablero real — pero sin
+    // escribir ningún YAML. El usuario decide si guardarla con "crear
+    // tablero <id> de <modulo> con <conceptos>".
     patron: /^sugerir tablero de (\w+)(?: con ([\w, ]+))?$/,
-    accion: async ([, moduloBruto, listaTexto]) => {
+    accion: async ([, moduloBruto, listaTexto], { vistaPrevia }) => {
       const modulo = moduloBruto.toLowerCase();
       if (!semantica.listarModulos().includes(modulo)) {
         return `No conozco el módulo "${modulo}". Módulos disponibles: ${semantica.listarModulos().join(', ')}.`;
@@ -411,7 +417,9 @@ const COMANDOS = [
       }
       const resultado = semantica.construirDefinicionDesdeConceptos('<id>', modulo, nombresConceptos);
       if (resultado.error) return resultado.error;
-      return `Sugerencia para "${modulo}" (conceptos: ${nombresConceptos.join(', ')}):\n\n${yaml.dump(resultado.def)}\n` +
+      vistaPrevia.modulo = modulo;
+      vistaPrevia.conceptos = nombresConceptos;
+      return `Vista previa mostrada en el panel central (datos en vivo de Odoo; no se guardó nada).\n` +
         `Para crearlo: crear tablero <id> de ${modulo}${listaTexto ? ` con ${nombresConceptos.join(',')}` : ''}`;
     },
   },
@@ -591,16 +599,17 @@ const COMANDOS = [
 async function responderChat(mensaje) {
   const normalizado = normalizar(mensaje);
   const tableroModificado = { id: null };
+  const vistaPrevia = { modulo: null, conceptos: null };
 
   for (const { patron, accion } of COMANDOS) {
     const patronSinDistinguirMayus = patron.flags.includes('i') ? patron : new RegExp(patron.source, `${patron.flags}i`);
     const coincidencia = normalizado.match(patronSinDistinguirMayus);
     if (coincidencia) {
       try {
-        const respuesta = await accion(coincidencia, { tableroModificado });
-        return { respuesta, tableroModificado: tableroModificado.id };
+        const respuesta = await accion(coincidencia, { tableroModificado, vistaPrevia });
+        return { respuesta, tableroModificado: tableroModificado.id, vistaPrevia: vistaPrevia.modulo ? vistaPrevia : null };
       } catch (err) {
-        return { respuesta: `Error ejecutando el comando: ${err.message || err}`, tableroModificado: null };
+        return { respuesta: `Error ejecutando el comando: ${err.message || err}`, tableroModificado: null, vistaPrevia: null };
       }
     }
   }
@@ -608,6 +617,7 @@ async function responderChat(mensaje) {
   return {
     respuesta: `No reconozco ese comando. Escribe "ayuda" para ver la lista de comandos disponibles.`,
     tableroModificado: null,
+    vistaPrevia: null,
   };
 }
 

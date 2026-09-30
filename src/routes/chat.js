@@ -9,8 +9,8 @@ router.post('/chat', requireAuth, async (req, res) => {
   if (!mensaje) return res.status(400).json({ error: 'Mensaje vacío.' });
 
   try {
-    const { respuesta, tableroModificado } = await responderChat(mensaje);
-    res.json({ respuesta, tableroModificado });
+    const { respuesta, tableroModificado, vistaPrevia } = await responderChat(mensaje);
+    res.json({ respuesta, tableroModificado, vistaPrevia });
   } catch (err) {
     res.status(500).json({ error: err.message || String(err) });
   }

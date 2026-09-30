@@ -390,12 +390,13 @@ describe('responderChat — capa semántica (leer, sugerir, crear)', () => {
     assert.match(r.respuesta, /Sin datos para "Ventas totales" por "Vendedor"/);
   });
 
-  test('"sugerir tablero de <modulo>" muestra una vista previa en YAML sin guardar nada', async () => {
+  test('"sugerir tablero de <modulo>" muestra una vista previa en vivo en el panel central, sin guardar nada', async () => {
     const r = await responderChat('sugerir tablero de crm');
-    assert.match(r.respuesta, /Sugerencia para "crm"/);
-    assert.match(r.respuesta, /modelo: crm.lead/);
+    assert.match(r.respuesta, /Vista previa mostrada en el panel central/);
     assert.match(r.respuesta, /Para crearlo: crear tablero <id> de crm/);
     assert.equal(r.tableroModificado, null);
+    assert.equal(r.vistaPrevia.modulo, 'crm');
+    assert.ok(Array.isArray(r.vistaPrevia.conceptos) && r.vistaPrevia.conceptos.length > 0);
     assert.equal(fs.existsSync(ARCHIVO_SEMANTICA), false);
   });
 

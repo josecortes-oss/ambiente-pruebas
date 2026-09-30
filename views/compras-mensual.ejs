@@ -46,6 +46,14 @@
               <% }) %>
             </select>
           </div>
+          <div class="campo-filtro">
+            <label for="tipoGrafico">Tipo de gráfico</label>
+            <select id="tipoGrafico" name="tipoGrafico">
+              <option value="barra" <%= filtros.tipoGrafico === 'barra' ? 'selected' : '' %>>Barra</option>
+              <option value="linea" <%= filtros.tipoGrafico === 'linea' ? 'selected' : '' %>>Línea</option>
+              <option value="torta" <%= filtros.tipoGrafico === 'torta' ? 'selected' : '' %>>Torta</option>
+            </select>
+          </div>
           <button type="submit">Aplicar</button>
         </form>
 
@@ -70,16 +78,7 @@
         <div class="cards-row">
           <div class="card">
             <div class="card-head"><h3><%= graficoProductos.titulo %></h3><p>purchase.order.line · price_subtotal</p></div>
-            <div class="bars">
-              <% if (graficoProductos.entradas.length === 0) { %><p style="padding:0 16px 16px;color:var(--muted);font-size:12px">Sin datos para este filtro.</p><% } %>
-              <% graficoProductos.entradas.forEach(([etiqueta, valor]) => { %>
-                <div class="bar-row">
-                  <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
-                  <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / graficoProductos.max) * 100) %>%"></div></div>
-                  <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
-                </div>
-              <% }) %>
-            </div>
+            <%- include('grafico-cuerpo', { grafico: graficoProductos, tipo: filtros.tipoGrafico }) %>
           </div>
 
           <div class="card selectable"
@@ -91,16 +90,7 @@
             data-modelo="purchase.order"
             data-definido-en="src/compras-mensual.js (tipo compras_mensual)">
             <div class="card-head"><h3><%= graficoProveedores.titulo %></h3><p>Click para ver el contexto semántico</p></div>
-            <div class="bars">
-              <% if (graficoProveedores.entradas.length === 0) { %><p style="padding:0 16px 16px;color:var(--muted);font-size:12px">Sin datos para este filtro.</p><% } %>
-              <% graficoProveedores.entradas.forEach(([etiqueta, valor]) => { %>
-                <div class="bar-row">
-                  <span class="bar-label" title="<%= etiqueta %>"><%= etiqueta %></span>
-                  <div class="bar-track"><div class="bar-fill" style="width: <%= Math.round((valor / graficoProveedores.max) * 100) %>%"></div></div>
-                  <span class="bar-value"><%= valor.toLocaleString('es-CL', { maximumFractionDigits: 2 }) %></span>
-                </div>
-              <% }) %>
-            </div>
+            <%- include('grafico-cuerpo', { grafico: graficoProveedores, tipo: filtros.tipoGrafico }) %>
           </div>
         </div>
 

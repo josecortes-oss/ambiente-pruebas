@@ -54,6 +54,11 @@
             var btnDeshacer = document.getElementById('btn-deshacer');
             if (btnDeshacer) btnDeshacer.disabled = false;
             setTimeout(function () { window.location.href = '/tableros/' + data.tableroModificado; }, 900);
+          } else if (data.vistaPrevia) {
+            agregarMensaje('Mostrando la vista previa en el panel central...', 'sistema');
+            var qs = 'modulo=' + encodeURIComponent(data.vistaPrevia.modulo) +
+              '&conceptos=' + encodeURIComponent(data.vistaPrevia.conceptos.join(','));
+            setTimeout(function () { window.location.href = '/tableros/vista-previa?' + qs; }, 900);
           }
         })
         .catch(function (err) { agregarMensaje('Error de conexión: ' + err.message, 'sistema'); })

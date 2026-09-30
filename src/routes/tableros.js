@@ -11,6 +11,11 @@ const versiones = require('../versiones');
 
 const router = express.Router();
 
+const TIPOS_GRAFICO_VALIDOS = new Set(['barra', 'linea', 'torta']);
+function tipoGraficoDesdeQuery(query) {
+  return TIPOS_GRAFICO_VALIDOS.has(query.tipoGrafico) ? query.tipoGrafico : 'barra';
+}
+
 // Sugerencias de la pantalla "construir un tablero": las combinaciones más
 // usuales de dimensión + medida en Ventas/Compras. Se filtran contra la
 // capa semántica real por si alguno de estos conceptos se renombra o se
@@ -45,6 +50,90 @@ router.get('/tableros', requireAuth, async (req, res) => {
   }
 });
 
+// Ejecuta un tablero genérico (def.modelo/campos/grafico) contra Odoo y
+// devuelve lo que necesita la vista: usado tanto por /tableros/:id (tablero
+// guardado) como por /tableros/vista-previa (sugerencia del chat, sin
+// guardar nada) para no duplicar la consulta + agregación.
+async function ejecutarTableroGenerico(def) {
+  const campos = def.campos.map((c) => (typeof c === 'string' ? c : c.campo));
+  const camposConsulta = new Set(campos);
+  if (def.grafico) {
+    camposConsulta.add(def.grafico.agrupar_por);
+    camposConsulta.add(def.grafico.medir);
+  }
+  const filas = await odooClient.executeKw(def.modelo, 'search_read', [def.dominio || []], {
+    fields: [...camposConsulta],
+    limit: def.limite || 80,
+    order: def.orden || '',
+  });
+
+  let grafico = null;
+  if (def.grafico) {
+    const totales = new Map();
+    for (const fila of filas) {
+      const bruto = fila[def.grafico.agrupar_por];
+      const etiqueta = Array.isArray(bruto) ? bruto[1] : bruto === false ? 'Sin dato' : String(bruto);
+      const valor = Number(fila[def.grafico.medir]) || 0;
+      totales.set(etiqueta, (totales.get(etiqueta) || 0) + valor);
+    }
+    const entradas = [...totales.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const max = Math.max(...entradas.map(([, valor]) => valor), 1);
+    grafico = { titulo: def.grafico.titulo || `${def.grafico.medir} por ${def.grafico.agrupar_por}`, entradas, max };
+  }
+
+  const columnas = def.campos.map((c) =>
+    typeof c === 'string' ? { campo: c, etiqueta: c } : { campo: c.campo, etiqueta: c.etiqueta || c.campo }
+  );
+
+  const filasFormateadas = filas.map((fila) => {
+    const formateada = {};
+    for (const { campo } of columnas) {
+      const valor = fila[campo];
+      if (Array.isArray(valor) && valor.length === 2) {
+        formateada[campo] = valor[1];
+      } else if (valor === false) {
+        formateada[campo] = '';
+      } else {
+        formateada[campo] = valor;
+      }
+    }
+    return formateada;
+  });
+
+  return { columnas, filas: filasFormateadas, grafico, totalRegistros: filas.length };
+}
+
+// Vista previa en vivo de una sugerencia del chat ("sugerir tablero de
+// <modulo> con <conceptos>"): arma la misma definición que "crear tablero"
+// usaría, la ejecuta contra Odoo y la muestra en el panel central — pero no
+// escribe ningún YAML ni queda versionada. Debe declararse antes de
+// "/tableros/:id" para que Express no confunda "vista-previa" con un id.
+router.get('/tableros/vista-previa', requireAuth, async (req, res) => {
+  try {
+    const modulo = String(req.query.modulo || '').toLowerCase();
+    const nombresConceptos = String(req.query.conceptos || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!semantica.listarModulos().includes(modulo)) {
+      return res.status(400).render('error', { mensaje: `No conozco el módulo "${modulo}".` });
+    }
+    const resultado = semantica.construirDefinicionDesdeConceptos('vista-previa', modulo, nombresConceptos);
+    if (resultado.error) {
+      return res.status(400).render('error', { mensaje: resultado.error });
+    }
+
+    const def = resultado.def;
+    const topbar = await datosTopbar(req.session.usuario, null);
+    const { columnas, filas, grafico, totalRegistros } = await ejecutarTableroGenerico(def);
+
+    res.render('vista-previa', { ...topbar, def, modulo, conceptos: nombresConceptos, columnas, filas, grafico, totalRegistros });
+  } catch (err) {
+    res.status(500).render('error', { mensaje: `Error al generar la vista previa: ${err.message || err}` });
+  }
+});
+
 router.get('/tableros/:id', requireAuth, async (req, res) => {
   try {
     const def = await getValidatedDefinition(req.params.id);
@@ -61,6 +150,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       const periodo = req.query.periodo || 'este_mes';
       const empresaId = req.query.empresa ? Number(req.query.empresa) : null;
       const vendedorId = req.query.vendedor ? Number(req.query.vendedor) : null;
+      const tipoGrafico = tipoGraficoDesdeQuery(req.query);
       const datos = await obtenerDatosVentasMensuales({ periodo, empresaId, vendedorId });
 
       const filasFormateadas = datos.filas.map((fila) => ({
@@ -85,7 +175,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         ...topbar,
         def,
         periodos: PERIODOS,
-        filtros: { periodo, empresaId, vendedorId },
+        filtros: { periodo, empresaId, vendedorId, tipoGrafico },
         empresas: datos.empresas,
         vendedores: datos.vendedores,
         graficoClientes: datos.graficoClientes,
@@ -100,6 +190,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       const periodo = req.query.periodo || 'este_mes';
       const empresaId = req.query.empresa ? Number(req.query.empresa) : null;
       const proveedorId = req.query.proveedor ? Number(req.query.proveedor) : null;
+      const tipoGrafico = tipoGraficoDesdeQuery(req.query);
       const datos = await obtenerDatosCompras({ periodo, empresaId, proveedorId });
 
       const filasFormateadas = datos.filas.map((fila) => ({
@@ -123,7 +214,7 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
         ...topbar,
         def,
         periodos: PERIODOS,
-        filtros: { periodo, empresaId, proveedorId },
+        filtros: { periodo, empresaId, proveedorId, tipoGrafico },
         empresas: datos.empresas,
         proveedores: datos.proveedores,
         graficoProveedores: datos.graficoProveedores,
@@ -133,52 +224,8 @@ router.get('/tableros/:id', requireAuth, async (req, res) => {
       });
     }
 
-    const campos = def.campos.map((c) => (typeof c === 'string' ? c : c.campo));
-    const camposConsulta = new Set(campos);
-    if (def.grafico) {
-      camposConsulta.add(def.grafico.agrupar_por);
-      camposConsulta.add(def.grafico.medir);
-    }
-    const filas = await odooClient.executeKw(def.modelo, 'search_read', [def.dominio || []], {
-      fields: [...camposConsulta],
-      limit: def.limite || 80,
-      order: def.orden || '',
-    });
-
-    let grafico = null;
-    if (def.grafico) {
-      const totales = new Map();
-      for (const fila of filas) {
-        const bruto = fila[def.grafico.agrupar_por];
-        const etiqueta = Array.isArray(bruto) ? bruto[1] : bruto === false ? 'Sin dato' : String(bruto);
-        const valor = Number(fila[def.grafico.medir]) || 0;
-        totales.set(etiqueta, (totales.get(etiqueta) || 0) + valor);
-      }
-      const entradas = [...totales.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
-      const max = Math.max(...entradas.map(([, valor]) => valor), 1);
-      grafico = { titulo: def.grafico.titulo || `${def.grafico.medir} por ${def.grafico.agrupar_por}`, entradas, max };
-    }
-
-    const columnas = def.campos.map((c) =>
-      typeof c === 'string' ? { campo: c, etiqueta: c } : { campo: c.campo, etiqueta: c.etiqueta || c.campo }
-    );
-
-    const filasFormateadas = filas.map((fila) => {
-      const formateada = {};
-      for (const { campo } of columnas) {
-        const valor = fila[campo];
-        if (Array.isArray(valor) && valor.length === 2) {
-          formateada[campo] = valor[1];
-        } else if (valor === false) {
-          formateada[campo] = '';
-        } else {
-          formateada[campo] = valor;
-        }
-      }
-      return formateada;
-    });
-
-    res.render('tablero-detalle', { ...topbar, def, columnas, filas: filasFormateadas, grafico, totalRegistros: filas.length });
+    const { columnas, filas, grafico, totalRegistros } = await ejecutarTableroGenerico(def);
+    res.render('tablero-detalle', { ...topbar, def, columnas, filas, grafico, totalRegistros });
   } catch (err) {
     res.status(500).render('error', { mensaje: `Error al ejecutar el tablero: ${err.message || err}` });
   }
